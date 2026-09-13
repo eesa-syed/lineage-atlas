@@ -2,7 +2,7 @@
   "name": "lineage-atlas",
   "version": "1.0.0",
   "private": false,
-  "description": "A DAG documentation explorer for data pipelines: searchable lineage, asset schemas and prose logic flows in one shareable file.",
+  "description": "Search a column, see where it comes from and everything it feeds. Local lineage docs for data pipelines: import a dbt project in one command, let an AI agent document it, review its work on a graph.",
   "bin": {
     "lineage-atlas": "bin/lineage-atlas.mjs"
   },
@@ -49,6 +49,10 @@
   "keywords": [
     "dag",
     "data-lineage",
+    "dbt",
+    "data-engineering",
+    "ai-agents",
+    "claude-code",
     "data-pipeline",
     "documentation",
     "data-catalog",

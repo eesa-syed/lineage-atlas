@@ -5,10 +5,11 @@
   <img alt="Lineage Atlas" src=".github/assets/logo-light.png" width="394">
 </picture>
 
-**Living documentation for data pipelines.**
-<br>
-Searchable lineage, table schemas and step-by-step logic in one graph you can read,
-edit, and share as a single file.
+### Search a column name. See where it comes from and everything it feeds.
+
+Import your dbt project with one command and get a searchable lineage graph, with
+every table's columns and tests and each model's logic in plain English. It runs
+locally. Then **let an AI agent document the pipeline, and review its work on the graph.**
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Node](https://img.shields.io/badge/node-%E2%89%A524-brightgreen)
@@ -16,15 +17,15 @@ edit, and share as a single file.
 ![File format](https://img.shields.io/badge/.atlas.json-format%208-lightgrey)
 ![Dependencies](https://img.shields.io/badge/native%20deps-none-success)
 
-[Why](#why-lineage-atlas) · [Features](#features) · [Installation](#installation) ·
-[Import from dbt](#import-your-dbt-project) · [Quick start](#quick-start) · [Sharing](#sharing-pipelines-the-atlasjson-file) ·
-[AI agents](#working-with-ai-agents) · [Docs](#documentation)
+[Install](#installation) · [Import from dbt](#import-your-dbt-project) ·
+[AI agents](#let-an-ai-agent-document-your-pipeline) · [Why](#why-lineage-atlas) ·
+[Features](#features) · [Sharing](#sharing-pipelines-the-atlasjson-file) · [Docs](#documentation)
 
 <br>
 
 <img alt="Demo: searching the column settlement_lag finds the int_order_payments model; clicking it highlights its whole upstream and downstream lineage; pressing Enter opens its step-by-step logic flow; the Schema tab then finds order_id across every table." src=".github/assets/demo.gif" width="100%">
 
-<sub>Search a column → see its lineage → read the logic → find it in every table. Twenty seconds, no setup beyond the demo that loads on first start.</sub>
+<sub>Search a column, land on the model that builds it, see everything upstream and downstream, then read what the model does. Recorded on the demo pipeline that loads on first start.</sub>
 
 </div>
 
@@ -236,6 +237,45 @@ mapping.
 
 <p align="center"><sub>dbt-labs' <a href="https://github.com/dbt-labs/jaffle-shop">jaffle-shop</a>, imported from its <code>manifest.json</code> and <code>catalog.json</code> with no edits. The <code>orders</code> mart is selected.</sub></p>
 
+## Let an AI agent document your pipeline
+
+Imported dbt models arrive with their structure but no explanation of *why* they
+exist. Writing that is slow for people and quick for an agent, but an agent's
+confident mistakes are hard to spot in a wall of text. **On a graph they're easy
+to spot:** a wrong dependency sits next to everything it connects to, and every
+edit the agent made is one filter click away.
+
+Atlas ships a **Claude Code skill** that teaches an agent the whole workflow:
+importing, tracing, writing logic flows, and tagging its own work for review.
+
+**1. Make the skill available.** It's already active when you run Claude Code
+inside this repository. To use it from your dbt project, copy it into your
+personal skills:
+
+```bash
+cp -r .claude/skills/lineage-atlas ~/.claude/skills/
+```
+
+**2. Ask for the work.** With Atlas running, from your dbt project folder:
+
+> *Import target/manifest.json into Lineage Atlas. Then, for every model in
+> `marts/`, read its SQL and write a logic flow that explains what it does and
+> why. Tag each model you document `agent_drafted`.*
+
+**3. Review it on the graph.** Click the `agent_drafted` tag chip, and the canvas
+dims everything the agent didn't touch. Open each model and check its logic
+against its inputs and outputs. Fix what's wrong, and remove the tag once it's
+right.
+
+The skill also covers questions you'd otherwise answer by reading the repo:
+*"Where does `lifetime_spend` come from?"*, *"What breaks if I change
+`stg_orders`?"*, *"Does a customer dimension already exist?"*
+
+It isn't tied to Claude. Everything the skill uses is a plain REST API over the
+same model the UI edits, so any agent or script can do the same. →
+[docs/AI_AGENTS.md](docs/AI_AGENTS.md) covers the API and the rules that keep an
+agent from quietly degrading a graph.
+
 ## Quick start
 
 1. **Explore the demo.** Click any step on the canvas and watch its lineage light
@@ -355,26 +395,6 @@ lineage-atlas import   analytics-warehouse-2026-09-13.atlas.json "Warehouse (fro
 `validate` runs that exact check and writes nothing, so you can use it as a CI
 gate. → [docs/FILE_FORMAT.md](docs/FILE_FORMAT.md) is the full specification, and
 the place to start if you want to generate files from another tool.
-
-## Working with AI agents
-
-Everything is reachable three ways: the **UI**, a **REST API**, and the **JSON
-file**. All three share one model, so a person and an agent work on the same
-pipeline with nothing to translate between them.
-
-A graph is a better thing for an agent to work from than a repository.
-Dependencies are explicit, traversal always finishes because the graph is
-acyclic, and every node carries a written purpose that static analysis can't
-recover.
-
-The intended loop is: **the agent proposes** structure, tagged as a draft. **The
-human reviews it on the canvas**, next to everything it connects to, where a wrong
-edge is obvious. **The human corrects it** and removes the draft tag.
-
-A ready-made **Claude Code skill** lives in
-[`.claude/skills/lineage-atlas/`](.claude/skills/lineage-atlas/SKILL.md). It covers
-tracing, impact analysis, documenting through the API, and writing valid
-`.atlas.json` files. → [docs/AI_AGENTS.md](docs/AI_AGENTS.md)
 
 ## Architecture
 

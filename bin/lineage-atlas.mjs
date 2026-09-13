@@ -17,7 +17,7 @@ const server = (file) => import(resolve(here, '../server/dist', file));
 /** Everything `server/src/cli.ts` answers to. */
 const FILE_COMMANDS = new Set(['list', 'export', 'import', 'validate', 'from-dbt', 'version']);
 
-const HELP = `lineage-atlas — a DAG documentation explorer for data pipelines
+const HELP = `lineage-atlas — search a column, see where it comes from and everything it feeds
 
 Usage
   lineage-atlas                       start the app and open it in a browser

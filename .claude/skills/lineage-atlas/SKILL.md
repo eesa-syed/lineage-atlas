@@ -388,6 +388,9 @@ safe and always creates a *new* pipeline. It never merges or overwrites.
   the human confirm.
 - **Tag what you touched** (`agent_drafted`, `needs_review`). Tags become filter
   chips immediately, so the human can review exactly your changes.
+- **Sign your writes.** Send `X-Atlas-User: <agent name>` (e.g. `claude-agent`)
+  on every POST, PUT, PATCH and DELETE. Without it your edits are recorded under
+  the human the server runs as, and *Last edit by* stops telling them apart.
 - **Report what you skipped.** Partial coverage looks identical to full coverage
   in a graph unless you say otherwise.
 
