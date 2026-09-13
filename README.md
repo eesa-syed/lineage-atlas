@@ -1,6 +1,9 @@
 <div align="center">
 
-# Lineage Atlas
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset=".github/assets/logo-dark.png">
+  <img alt="Lineage Atlas" src=".github/assets/logo-light.png" width="394">
+</picture>
 
 **Living documentation for data pipelines.**
 <br>
@@ -19,12 +22,9 @@ edit, and share as a single file.
 
 <br>
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset=".github/assets/flow-dark.png">
-  <img alt="The Lineage Atlas Flow view: a searchable pipeline graph with lineage highlighted for the selected code, and an inspector showing its tags, inputs, outputs and metadata." src=".github/assets/flow-light.png">
-</picture>
+<img alt="Demo: searching the column settlement_lag finds the int_order_payments model; clicking it highlights its whole upstream and downstream lineage; pressing Enter opens its step-by-step logic flow; the Schema tab then finds order_id across every table." src=".github/assets/demo.gif" width="100%">
 
-<sub>The Flow view. Select a step and its whole upstream and downstream path lights up.</sub>
+<sub>Search a column → see its lineage → read the logic → find it in every table. Twenty seconds, no setup beyond the demo that loads on first start.</sub>
 
 </div>
 
@@ -129,6 +129,12 @@ documentation; any number of **isolated pipelines** in one install; **light and
 dark** themes; and a full **REST API** that drives everything the UI can do.
 
 ## Screenshots
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset=".github/assets/flow-dark.png">
+  <img alt="The Lineage Atlas Flow view: a searchable pipeline graph with lineage highlighted for the selected code, and an inspector showing its tags, inputs, outputs and metadata." src=".github/assets/flow-light.png">
+</picture>
+<p align="center"><sub><b>Flow.</b> Select a step and its whole upstream and downstream path lights up.</sub></p>
 
 <table>
 <tr>

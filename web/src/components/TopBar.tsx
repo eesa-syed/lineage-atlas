@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useAtlas } from '../state/store';
 import { PipelineMenu } from './PipelineMenu';
 
 type Theme = 'system' | 'light' | 'dark';
@@ -13,8 +14,16 @@ function readStoredTheme(): Theme {
   }
 }
 
+/** `priya@acme.example` → `PR`, `Analytics Eng` → `AE`. */
+function initials(name: string): string {
+  const words = name.split('@')[0].split(/[\s._-]+/).filter(Boolean);
+  const letters = words.length > 1 ? words[0][0] + words[1][0] : (words[0] ?? '?').slice(0, 2);
+  return letters.toUpperCase();
+}
+
 export function TopBar() {
   const [theme, setTheme] = useState<Theme>(readStoredTheme);
+  const user = useAtlas((s) => s.version?.user);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -33,10 +42,14 @@ export function TopBar() {
   return (
     <header className="topbar">
       <div className="mark">
-        <svg width="19" height="19" viewBox="0 0 19 19" aria-hidden="true">
-          <path d="M3 4.5h4M3 9.5h4M3 14.5h4" stroke="var(--ink-3)" strokeWidth="1.4" strokeLinecap="round" />
-          <path d="M7 4.5C11 4.5 8 9.5 12 9.5M7 14.5C11 14.5 8 9.5 12 9.5" stroke="var(--accent)" strokeWidth="1.4" fill="none" />
-          <circle cx="14.5" cy="9.5" r="2.6" fill="var(--accent)" />
+        <svg width="20" height="20" viewBox="0 0 32 32" aria-hidden="true">
+          {/* Three sources converge on a model, which writes one table. */}
+          <path d="M4.8 7C11.3 7 9.8 16 15.8 16M4.8 25C11.3 25 9.8 16 15.8 16M4.8 16H20.8" fill="none" stroke="var(--accent)" strokeWidth="2.2" strokeLinecap="round" />
+          <circle cx="4.3" cy="7" r="2.9" fill="var(--ink-3)" />
+          <circle cx="4.3" cy="16" r="2.9" fill="var(--ink-3)" />
+          <circle cx="4.3" cy="25" r="2.9" fill="var(--ink-3)" />
+          <circle cx="15.3" cy="16" r="4.6" fill="var(--accent)" />
+          <rect x="21.8" y="12" width="7.6" height="8" rx="2" fill="none" stroke="var(--accent)" strokeWidth="2.2" />
         </svg>
         <b>Lineage Atlas</b>
       </div>
@@ -55,10 +68,12 @@ export function TopBar() {
       <button className="theme-toggle" onClick={cycle} title="Switch theme">
         {theme === 'system' ? '◐ system' : theme === 'light' ? '☀ light' : '☾ dark'}
       </button>
-      <div className="who">
-        <i>SE</i>
-        <span>syedeesa</span>
-      </div>
+      {user && (
+        <div className="who" title="Edits made here are recorded under this name. Set ATLAS_USER on the server to change it.">
+          <i>{initials(user)}</i>
+          <span>{user}</span>
+        </div>
+      )}
     </header>
   );
 }

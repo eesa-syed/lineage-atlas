@@ -25,6 +25,13 @@ independent of the release version. Its history is in
 
 ### Added
 
+- **A logo.** Three sources converge on a model that writes one table — the
+  shape of every pipeline Atlas draws. It is the favicon, the top-bar mark, and
+  the README header (`.github/assets/`: `logo-light.png`, `logo-dark.png`,
+  `logo-mark.svg`, `icon.svg`, `icon.png`).
+- `GET /api/version` reports `user`: the name edits without an `X-Atlas-User`
+  header are attributed to.
+
 - **Import a dbt project.** `lineage-atlas import target/manifest.json` reads
   a dbt manifest directly — no exporter, no plugin — and *Import from file…* in
   the app accepts one too. Models, seeds, snapshots, sources and exposures
@@ -190,6 +197,10 @@ independent of the release version. Its history is in
   tab's own search instead of switching to Flow.
 
 ### Fixed
+
+- **The top bar showed a hardcoded username** ("SE / syedeesa") to everyone who
+  ran Atlas. It now shows the name edits from the browser are actually recorded
+  under — `ATLAS_USER`, else the operating-system user — with its initials.
 
 - The rail's "nothing matched" message was unreachable while grouping was off:
   an empty result rendered an `All codes` heading with nothing under it, which

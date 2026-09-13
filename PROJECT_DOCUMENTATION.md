@@ -1162,8 +1162,9 @@ that generates `.atlas.json`, and the intended pre-flight for an agent.
 ## 11. Notable implementation details & conventions
 
 - **No auth, no users.** Anyone who can reach the API can read and mutate
-  every pipeline. `TopBar` shows a static "SE / syedeesa" chip — decorative,
-  not an authenticated session.
+  every pipeline. `TopBar` shows the name from `GET /api/version`'s `user`
+  (`ATLAS_USER`, else the OS user) — who browser edits are attributed to, not
+  an authenticated session.
 - **No ORM, hand-written SQL everywhere**, deliberately — the project
   comment in `db.ts` notes `node:sqlite` is stricter about named parameters
   than `better-sqlite3`, so every query binds positionally.

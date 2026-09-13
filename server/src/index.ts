@@ -74,6 +74,7 @@ app.get('/api/version', (_req, res) => {
     bundleVersion: BUNDLE_VERSION,
     minBundleVersion: MIN_BUNDLE_VERSION,
     node: process.versions.node,
+    user: resolveActor(),
   };
   res.json(info);
 });

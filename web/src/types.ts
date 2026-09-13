@@ -103,6 +103,9 @@ export interface VersionInfo {
   bundleVersion: number;
   minBundleVersion: number;
   node: string;
+  /** Who edits made without an `X-Atlas-User` header are attributed to — every
+   * edit from the web app, since it sends none. `ATLAS_USER`, else the OS user. */
+  user: string;
 }
 
 export interface FlowInput {
