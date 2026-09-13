@@ -223,6 +223,13 @@ Tables get their columns, types and dbt tests, and owners come from `meta.owner`
 or dbt groups. No SQL is copied. → [docs/DBT.md](docs/DBT.md) has the full
 mapping.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset=".github/assets/dbt-jaffle-shop-dark.png">
+  <img alt="dbt-labs/jaffle-shop imported into Lineage Atlas: seeds, sources, staging models and marts laid out left to right, with the orders mart selected and its 13 upstream steps highlighted." src=".github/assets/dbt-jaffle-shop-light.png">
+</picture>
+
+<p align="center"><sub>dbt-labs' <a href="https://github.com/dbt-labs/jaffle-shop">jaffle-shop</a>, imported from its <code>manifest.json</code> and <code>catalog.json</code> with no edits. The <code>orders</code> mart is selected.</sub></p>
+
 ## Quick start
 
 1. **Explore the demo.** Click any step on the canvas and watch its lineage light
