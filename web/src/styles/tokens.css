@@ -1,0 +1,130 @@
+/* Blueprint palette. Every colour used anywhere in the app is declared here in
+   the bare :root block first, so the un-stamped (system-theme) document always
+   resolves a complete set. */
+:root {
+  --paper: #edf0f2;
+  --surface: #ffffff;
+  --surface-2: #e3e9ed;
+  --sunk: #e7ecef;
+  --grid: #d6dee4;
+  --line: #c7d2da;
+  --line-soft: #dde4e9;
+
+  --ink: #16222e;
+  --ink-2: #4b5e6e;
+  --ink-3: #7f92a2;
+
+  --accent: #d4551f;
+  --accent-ink: #ffffff;
+  --accent-wash: #fae7de;
+
+  --t-source: #3d6e96;
+  --t-sql: #1f7a70;
+  --t-code: #6c5cb5;
+  --t-mart: #9a6b10;
+  --t-check: #a33b54;
+
+  --good: #2f7d4f;
+  --warn: #a0700f;
+  --bad: #b23b45;
+
+  /* Colours handed out to tags people invent. Deliberately desaturated so the
+     accent stays the only loud colour on the canvas. */
+  --tag-1: #3d6e96;
+  --tag-2: #1f7a70;
+  --tag-3: #6c5cb5;
+  --tag-4: #9a6b10;
+  --tag-5: #a33b54;
+  --tag-6: #4a7a3f;
+  --tag-7: #8a5a2b;
+  --tag-8: #2f6f8f;
+
+  --shadow: 0 1px 2px rgba(22, 34, 46, 0.08), 0 6px 18px rgba(22, 34, 46, 0.07);
+  --shadow-lift: 0 2px 6px rgba(22, 34, 46, 0.12), 0 16px 34px rgba(22, 34, 46, 0.14);
+  --r: 6px;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --paper: #0d1720;
+    --surface: #132330;
+    --surface-2: #0f1d28;
+    --sunk: #0a121a;
+    --grid: #1a2b39;
+    --line: #24394b;
+    --line-soft: #1b2c3a;
+
+    --ink: #dde8f0;
+    --ink-2: #95aaba;
+    --ink-3: #62788a;
+
+    --accent: #ff7a45;
+    --accent-ink: #1a0d07;
+    --accent-wash: #372016;
+
+    --t-source: #6fa6d0;
+    --t-sql: #3fb5a6;
+    --t-code: #9e8fe8;
+    --t-mart: #d9a63c;
+    --t-check: #e0687f;
+
+    --good: #4fb37a;
+    --warn: #d9a63c;
+    --bad: #e36470;
+
+    --tag-1: #6fa6d0;
+    --tag-2: #3fb5a6;
+    --tag-3: #9e8fe8;
+    --tag-4: #d9a63c;
+    --tag-5: #e0687f;
+    --tag-6: #7fbf6a;
+    --tag-7: #d09a63;
+    --tag-8: #6cb2d6;
+
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 18px rgba(0, 0, 0, 0.35);
+    --shadow-lift: 0 2px 6px rgba(0, 0, 0, 0.5), 0 18px 38px rgba(0, 0, 0, 0.5);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme='dark'] {
+  --paper: #0d1720;
+  --surface: #132330;
+  --surface-2: #0f1d28;
+  --sunk: #0a121a;
+  --grid: #1a2b39;
+  --line: #24394b;
+  --line-soft: #1b2c3a;
+
+  --ink: #dde8f0;
+  --ink-2: #95aaba;
+  --ink-3: #62788a;
+
+  --accent: #ff7a45;
+  --accent-ink: #1a0d07;
+  --accent-wash: #372016;
+
+  --t-source: #6fa6d0;
+  --t-sql: #3fb5a6;
+  --t-code: #9e8fe8;
+  --t-mart: #d9a63c;
+  --t-check: #e0687f;
+
+  --good: #4fb37a;
+  --warn: #d9a63c;
+  --bad: #e36470;
+
+  --tag-1: #6fa6d0;
+  --tag-2: #3fb5a6;
+  --tag-3: #9e8fe8;
+  --tag-4: #d9a63c;
+  --tag-5: #e0687f;
+  --tag-6: #7fbf6a;
+  --tag-7: #d09a63;
+  --tag-8: #6cb2d6;
+
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 18px rgba(0, 0, 0, 0.35);
+  --shadow-lift: 0 2px 6px rgba(0, 0, 0, 0.5), 0 18px 38px rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
+}

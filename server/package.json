@@ -1,0 +1,30 @@
+{
+  "name": "server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "seed": "tsx src/seed.ts --force",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "pipelines": "tsx src/cli.ts list",
+    "export": "tsx src/cli.ts export",
+    "import": "tsx src/cli.ts import",
+    "validate": "tsx src/cli.ts validate",
+    "version:show": "tsx src/cli.ts version"
+  },
+  "dependencies": {
+    "express": "^4.22.2",
+    "nanoid": "^5.0.9"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  },
+  "license": "MIT"
+}

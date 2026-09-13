@@ -1,0 +1,29 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "lineage-atlas",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "port": 5173
+    },
+    {
+      "name": "lineage-atlas-built",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "bin/lineage-atlas.mjs",
+        "serve",
+        "--port",
+        "5185",
+        "--no-open",
+        "--db",
+        "data/atlas.db"
+      ],
+      "port": 5185,
+      "autoPort": false
+    }
+  ]
+}
