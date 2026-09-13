@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAtlas } from '../state/store';
-import { DateFilter } from './DateFilter';
+import { FilterPanel } from './FilterPanel';
 import { codeColor, isDateFiltered, primaryTag, tagColor, withinDates, type AssetSummary } from '../types';
 
 /** The asset catalogue: every table this pipeline documents, and its coverage. */
 export function AssetList() {
   const assets = useAtlas((s) => s.assets);
   const query = useAtlas((s) => s.query);
-  const tagCounts = useAtlas((s) => s.tagCounts);
   const tagFilter = useAtlas((s) => s.tagFilter);
   const dateFilter = useAtlas((s) => s.dateFilter);
   const groupBy = useAtlas((s) => s.assetGroupBy);
@@ -16,8 +15,6 @@ export function AssetList() {
   const removeAsset = useAtlas((s) => s.removeAsset);
   const openSchemaTab = useAtlas((s) => s.openSchemaTab);
   const select = useAtlas((s) => s.select);
-  const toggleTagFilter = useAtlas((s) => s.toggleTagFilter);
-  const clearTagFilters = useAtlas((s) => s.clearTagFilters);
   const setGroupBy = useAtlas((s) => s.setAssetGroupBy);
 
   const [draft, setDraft] = useState<string | null>(null);
@@ -119,29 +116,7 @@ export function AssetList() {
         )}
       </div>
 
-      <div className="sec">
-        <div className="sec-head">
-          <span className="rail-label">Filter by tag</span>
-          <button className="linkbtn" onClick={clearTagFilters}>
-            reset
-          </button>
-        </div>
-        <div className="chips">
-          {tagCounts.map(({ tag, count }) => (
-            <button
-              key={tag}
-              className="chip"
-              aria-pressed={tagFilter.has(tag)}
-              onClick={() => toggleTagFilter(tag)}
-            >
-              {tag}
-              <span className="n">{count}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <DateFilter idPrefix="assets" />
+      <FilterPanel idPrefix="assets" />
 
       <div className="groupbar">
         <label className="rail-label" htmlFor="asset-groupby">

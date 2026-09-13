@@ -136,6 +136,29 @@ button.chip:hover { border-color: var(--ink-3); color: var(--ink); }
 }
 .chip-input:focus { outline: none; }
 
+/* The expanded tag filter scrolls inside its own box, so however many tags a
+   pipeline has, the date filter and the list below stay where they are. */
+.chips-capped { max-height: 128px; overflow-y: auto; align-content: flex-start; padding-right: 2px; }
+.chips-capped::-webkit-scrollbar { width: 7px; }
+.chips-capped::-webkit-scrollbar-thumb { background: var(--line); border-radius: 7px; }
+.chip.chip-more { background: transparent; border-style: dashed; color: var(--ink-3); }
+.tag-find { width: 100%; margin-bottom: 7px; }
+.tag-less { margin-top: 7px; }
+.sec-count { color: var(--accent); }
+
+/* Tags and dates share one section: one line when closed, with a removable
+   chip per active filter, and the full controls only when opened. */
+.sec.filters { padding-top: 8px; padding-bottom: 8px; }
+.filters-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.filters-toggle { display: flex; align-items: center; gap: 5px; padding: 2px 0; min-width: 0; }
+.filters-toggle .caret { color: var(--ink-3); font-size: 10px; width: 10px; }
+.filters-toggle:hover .rail-label { color: var(--ink); }
+.filters-summary { margin-top: 7px; }
+.filters-body { margin-top: 6px; }
+.fsub { padding-top: 8px; }
+.fsub + .fsub { margin-top: 8px; border-top: 1px dashed var(--line-soft); }
+.fsub-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; }
+
 /* -------------------------------------------------------------- node list */
 .nrow {
   display: grid; grid-template-columns: auto auto 1fr auto; align-items: center; gap: 8px;

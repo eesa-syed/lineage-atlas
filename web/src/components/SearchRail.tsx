@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { AssetList } from './AssetList';
 import { BulkActions } from './BulkActions';
-import { DateFilter } from './DateFilter';
+import { FilterPanel } from './FilterPanel';
 import { useAtlas } from '../state/store';
 import { matches } from '../lib/lineage';
 import { STATUS_COLOR, codeColor, isDateFiltered, primaryTag, type Code } from '../types';
@@ -23,7 +23,6 @@ function Highlighted({ text, query }: { text: string; query: string }) {
 export function SearchRail() {
   const codes = useAtlas((s) => s.codes);
   const edges = useAtlas((s) => s.edges);
-  const tagCounts = useAtlas((s) => s.tagCounts);
   const query = useAtlas((s) => s.query);
   const tagFilter = useAtlas((s) => s.tagFilter);
   const dateFilter = useAtlas((s) => s.dateFilter);
@@ -33,8 +32,6 @@ export function SearchRail() {
   const bulkConnectFrom = useAtlas((s) => s.bulkConnectFrom);
 
   const setQuery = useAtlas((s) => s.setQuery);
-  const toggleTagFilter = useAtlas((s) => s.toggleTagFilter);
-  const clearTagFilters = useAtlas((s) => s.clearTagFilters);
   const select = useAtlas((s) => s.select);
   const connect = useAtlas((s) => s.connect);
   const connectTo = useAtlas((s) => s.connectTo);
@@ -210,29 +207,7 @@ export function SearchRail() {
         </div>
       )}
 
-      <div className="sec">
-        <div className="sec-head">
-          <span className="rail-label">Filter by tag</span>
-          <button className="linkbtn" onClick={clearTagFilters}>
-            reset
-          </button>
-        </div>
-        <div className="chips">
-          {tagCounts.map(({ tag, count }) => (
-            <button
-              key={tag}
-              className="chip"
-              aria-pressed={tagFilter.has(tag)}
-              onClick={() => toggleTagFilter(tag)}
-            >
-              {tag}
-              <span className="n">{count}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <DateFilter idPrefix="codes" />
+      <FilterPanel idPrefix="codes" />
 
       <div className="groupbar">
         <label className="rail-label" htmlFor="groupby">

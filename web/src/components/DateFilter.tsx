@@ -1,5 +1,5 @@
 import { useAtlas } from '../state/store';
-import { ANY_DATE, dayOffset, isDateFiltered, type DateField } from '../types';
+import { ANY_DATE, dayOffset, isDateFiltered, type DateField, type DateRange } from '../types';
 
 /**
  * The windows worth one click. Everything else is what the two date boxes are
@@ -17,6 +17,15 @@ const FIELDS: { value: DateField; label: string }[] = [
   { value: 'createdAt', label: 'Created' },
 ];
 
+/** A short name for the active window, for the collapsed filter summary. */
+export function describeDates(range: DateRange): string {
+  const field = FIELDS.find((f) => f.value === range.field)?.label.toLowerCase() ?? 'updated';
+  const preset = PRESETS.find((p) => range.from === p.from() && range.to === p.to());
+  if (preset) return `${field} ${preset.label}`;
+  if (range.from && range.to) return `${field} ${range.from} → ${range.to}`;
+  return range.from ? `${field} ≥ ${range.from}` : `${field} ≤ ${range.to}`;
+}
+
 /**
  * Filters codes or assets by one of their two stewardship dates. One control,
  * one piece of state, rendered by both rail tabs — the same arrangement the
@@ -25,6 +34,7 @@ const FIELDS: { value: DateField; label: string }[] = [
  *
  * The presets write into the very same two boxes rather than being a mode of
  * their own: whatever a chip does is visible as dates, and editable from there.
+ * Rendered inside the combined filter panel, so it has no section of its own.
  */
 export function DateFilter({ idPrefix }: { idPrefix: string }) {
   const range = useAtlas((s) => s.dateFilter);
@@ -35,9 +45,9 @@ export function DateFilter({ idPrefix }: { idPrefix: string }) {
   const isOn = (preset: (typeof PRESETS)[number]) => range.from === preset.from() && range.to === preset.to();
 
   return (
-    <div className="sec">
-      <div className="sec-head">
-        <span className="rail-label">Filter by date</span>
+    <div className="fsub">
+      <div className="fsub-head">
+        <span className="rail-label">Date</span>
         <button className="linkbtn" onClick={clearDateFilter} disabled={!active && range.field === ANY_DATE.field}>
           reset
         </button>
