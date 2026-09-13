@@ -287,6 +287,9 @@ export interface BundleReadResult {
   /** Non-fatal repairs: the import still lands whole, but something was
    * dropped, skipped or defaulted, and the user is told which. */
   warnings: string[];
+  /** Set when the input was a dbt manifest rather than a bundle: one line
+   * saying what was read from it. See `dbt.ts`. */
+  converted?: string;
 }
 
 export interface ImportResult {
@@ -298,6 +301,8 @@ export interface ImportResult {
   };
   upgrades: string[];
   warnings: string[];
+  /** Set when the file was a dbt manifest. */
+  converted?: string;
 }
 
 /** `GET /api/version` — what a client (or an agent) reads to find out what it

@@ -28,6 +28,7 @@
     "export": "npm run export -w server --",
     "import": "npm run import -w server --",
     "validate": "npm run validate -w server --",
+    "from-dbt": "npm run from-dbt -w server --",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {

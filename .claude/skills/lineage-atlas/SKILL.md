@@ -1,6 +1,6 @@
 ---
 name: lineage-atlas
-description: Read, trace and document data pipelines in Lineage Atlas — a DAG of codes (pipeline steps) and assets (tables with schemas) exposed over a REST API and a self-contained .atlas.json file. Use when asked to trace a column or table to its source, do impact analysis before changing a model, check whether data already exists somewhere, document an undocumented pipeline, or read/write/validate an .atlas.json file. Also covers running Atlas itself — starting it, which port and which database it is using, and where its data lives.
+description: Read, trace and document data pipelines in Lineage Atlas — a DAG of codes (pipeline steps) and assets (tables with schemas) exposed over a REST API and a self-contained .atlas.json file. Use when asked to trace a column or table to its source, do impact analysis before changing a model, check whether data already exists somewhere, document an undocumented pipeline, import a dbt project (manifest.json/catalog.json) into Atlas, or read/write/validate an .atlas.json file. Also covers running Atlas itself — starting it, which port and which database it is using, and where its data lives.
 ---
 
 # Lineage Atlas
@@ -165,6 +165,34 @@ declarations are wrong, and writing prose on top of a wrong graph compounds it.
 One pipeline is one self-contained `.atlas.json`. For a large pipeline, author
 the file and import it once rather than making hundreds of calls. The format is
 below; `docs/FILE_FORMAT.md` is the normative spec if anything here is unclear.
+
+### A dbt project: don't write the file, import the manifest
+
+If the pipeline is a dbt project, **do not hand-author a bundle or make API
+calls to recreate it.** Atlas reads dbt's own artifacts:
+
+```bash
+dbt docs generate    # in the dbt project: target/manifest.json + target/catalog.json
+lineage-atlas validate target/manifest.json --catalog target/catalog.json   # dry run
+lineage-atlas import   target/manifest.json --catalog target/catalog.json
+lineage-atlas from-dbt target/manifest.json out.atlas.json --catalog target/catalog.json  # write a file instead
+```
+
+From a checkout use `npm run import -- …` with **absolute paths** (npm runs it
+from `server/`). Over HTTP, `POST /api/pipelines/import` accepts the manifest as
+the body, or `{"bundle": <manifest>, "catalog": <catalog>}`. `dbt parse` gives a
+manifest without warehouse access; the graph is complete but tables carry only
+YAML-documented columns.
+
+The `converted` line says what was read; `repaired` lines starting "Skipped"
+list what was not (singular tests, metrics, analyses…). Edges are written
+explicitly, so no relink is needed. Imported codes have **empty logic flows** —
+SQL is never copied — which is the high-value work left for you: write the
+*why* of each model with `PUT /api/codes/:id/flow`, tagging what you touch.
+Mapping details: `docs/DBT.md`.
+
+Passing `catalog.json` or `run_results.json` as the main file is refused with a
+message naming the right one.
 
 ### The `.atlas.json` format
 

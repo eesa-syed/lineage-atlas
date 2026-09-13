@@ -113,8 +113,8 @@ app.get('/api/pipelines/:id/export', wrap((req, res) => {
  * upgraded from, and what would be repaired, before committing to it.
  */
 app.post('/api/pipelines/validate', wrap((req, res) => {
-  const { bundle } = req.body ?? {};
-  const { bundle: read, sourceVersion, upgrades, warnings } = readBundle(bundle ?? req.body);
+  const { bundle, catalog } = req.body ?? {};
+  const { bundle: read, sourceVersion, upgrades, warnings, converted } = readBundle(bundle ?? req.body, { catalog });
   res.json({
     ok: true,
     pipeline: read.pipeline,
@@ -122,6 +122,7 @@ app.post('/api/pipelines/validate', wrap((req, res) => {
     source: { formatVersion: sourceVersion, generator: read.generator, exportedAt: read.exportedAt },
     upgrades,
     warnings,
+    ...(converted ? { converted } : {}),
   });
 }));
 
@@ -131,11 +132,14 @@ app.post('/api/pipelines/validate', wrap((req, res) => {
  * the file's own text straight to `fetch` without parsing and re-serialising a
  * pipeline-sized object in the browser first. The name for the new pipeline
  * then travels as `?name=`.
+ *
+ * A dbt `manifest.json` is accepted in place of a bundle, and the envelope may
+ * carry its `catalog.json` as `catalog` for column types (see `dbt.ts`).
  */
 app.post('/api/pipelines/import', wrap((req, res) => {
-  const { bundle, name } = req.body ?? {};
+  const { bundle, name, catalog } = req.body ?? {};
   const chosen = name ?? req.query.name;
-  res.status(201).json(importBundle(bundle ?? req.body, chosen ? String(chosen) : undefined));
+  res.status(201).json(importBundle(bundle ?? req.body, chosen ? String(chosen) : undefined, { catalog }));
 }));
 
 /* ----------------------------------------------------------------- graph */

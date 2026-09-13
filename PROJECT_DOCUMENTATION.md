@@ -109,6 +109,7 @@ Project tracker/
 │       ├── types.ts            every shared TypeScript type + the .atlas.json bundle format + legacy v1 shape
 │       ├── repo.ts             all reads and mutations: graph, codes, tags, edges, assets, asset links, flows, pipelines
 │       ├── bundle.ts           .atlas.json export, the format upgrade ladder, validation, import
+│       ├── dbt.ts              dbt manifest.json (+ catalog.json) → bundle translator
 │       ├── cli.ts              `list | export | validate | import | version` from the terminal
 │       ├── index.ts            Express app: routes, error handling, static hosting of the built web app
 │       ├── seed.ts             seeds (or force-reseeds) the demo "warehouse" pipeline
@@ -1292,9 +1293,11 @@ unflagged; no native compiler needed since SQLite comes from Node itself.
 Carried over from the README, confirmed against the code:
 
 - No authentication.
-- No dbt/YAML importer (would need its own translator into the bundle
-  shape, reusing `importBundle`).
-- No merge-on-import — import always creates a new pipeline.
+- No importers beyond dbt. `dbt.ts` is the pattern for another: a pure
+  translator into the bundle shape, detected in `readBundle`, so it reuses
+  `importBundle` and every check in it.
+- No merge-on-import — import always creates a new pipeline, including a
+  re-imported dbt project.
 - Sample rows aren't editable in the UI (seed/import only).
 - No rename-code UI (the API supports it; nothing calls it).
 - Inferred links are additive-only — removing an asset link never retracts

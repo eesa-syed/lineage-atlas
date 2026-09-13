@@ -341,6 +341,10 @@ The shortest useful file is a pipeline with one code and nothing else:
 }
 ```
 
+For dbt specifically there is nothing to write: Atlas reads `manifest.json`
+directly, and `server/src/dbt.ts` is a complete worked example of a producer —
+see [DBT.md](DBT.md).
+
 Then check it before you trust it — this writes nothing:
 
 ```bash
@@ -357,9 +361,12 @@ Three things are worth doing even though nothing forces you to:
 - **Set `assetRef` and `producedBy`** wherever you can. A link with a bare `path`
   and no `assetRef` is a string; one that resolves to an asset is a node in the
   graph, and it is what lets Atlas infer the edges.
-- **Leave `edges` empty and let Atlas derive them** if your source already knows
-  each step's inputs and outputs. Declaring both is fine, but the declarations
-  are the ground truth and the arrows follow from them.
+- **Write out every edge.** Import never infers edges from a file: it inserts
+  exactly the `edges` listed, so a file with `"edges": []` lands as unconnected
+  boxes. If your source only knows each step's inputs and outputs, either derive
+  the edges yourself (for each output path, an edge to every code with that path
+  as an input) or import and then call `POST /api/pipelines/:id/relink`, which
+  derives them from the declarations.
 - **Fill in the stewardship fields** if your source knows them — a dbt `owner`
   meta key, a file's git history. Omitting them is legal and they default to the
   import's own clock, but a whole pipeline dated "the moment it was imported"

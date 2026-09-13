@@ -118,7 +118,8 @@ interface AtlasState {
   renamePipeline: (graphId: string, name: string) => Promise<void>;
   removePipeline: (graphId: string) => Promise<void>;
   exportPipeline: () => void;
-  importPipelineFile: (file: File) => Promise<void>;
+  /** One `.atlas.json` or dbt `manifest.json` — or a manifest and its `catalog.json` together. */
+  importPipelineFiles: (files: File[]) => Promise<void>;
   notify: (message: string, tone?: 'info' | 'error') => void;
   dismissToast: (id: number) => void;
 
@@ -358,21 +359,34 @@ export const useAtlas = create<AtlasState>((set, get) => ({
     get().notify(`Exported "${name}" as a .atlas.json file`);
   },
 
-  async importPipelineFile(file) {
+  async importPipelineFiles(files) {
     try {
       // Handed over as text: the server parses it, and the browser is spared
-      // building a whole pipeline in memory just to stringify it again.
-      const { pipeline, source, upgrades, warnings } = await api.importPipeline(await file.text());
+      // building a whole pipeline in memory just to stringify it again. A dbt
+      // artifact names its kind in the first few hundred bytes, which is all
+      // it takes to tell a catalog from the manifest it belongs with.
+      const texts = await Promise.all(files.map((f) => f.text()));
+      const isCatalog = (text: string) => /\/dbt\/catalog\/v\d+/.test(text.slice(0, 1000));
+      const main = texts.find((t) => !isCatalog(t));
+      const catalog = texts.find(isCatalog);
+      if (!main) throw new Error('That is a dbt catalog.json on its own. Select the manifest.json from the same target/ folder with it.');
+      if (texts.length > 2 || (texts.length === 2 && !catalog)) {
+        throw new Error('Choose one file, or a dbt manifest.json together with its catalog.json.');
+      }
+      const { pipeline, source, upgrades, warnings, converted } = await api.importPipeline(main, undefined, catalog);
       await get().selectPipeline(pipeline.id);
 
       // The file landed whole either way, but *how* it landed is worth keeping:
       // it may have come from an older format, or had an edge dropped to keep
       // the graph acyclic. The console holds every note; the toast holds the
       // headline, since one line cannot carry a list.
+      if (converted) console.info(`[atlas import] converted — ${converted}`);
       for (const note of upgrades) console.info(`[atlas import] upgraded — ${note}`);
       for (const note of warnings) console.warn(`[atlas import] repaired — ${note}`);
 
-      const parts = [`Imported "${pipeline.name}" — ${pipeline.codeCount} codes, ${pipeline.edgeCount} edges`];
+      const parts = [
+        `Imported ${converted ? 'dbt project ' : ''}"${pipeline.name}" — ${pipeline.codeCount} codes, ${pipeline.edgeCount} edges`,
+      ];
       if (upgrades.length) parts.push(`upgraded from format ${source.formatVersion}`);
       if (warnings.length === 1) parts.push(warnings[0]);
       else if (warnings.length > 1) parts.push(`${warnings.length} adjustments — see the console`);

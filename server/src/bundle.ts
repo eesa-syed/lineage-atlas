@@ -1,5 +1,6 @@
 import { nanoid } from 'nanoid';
 import { all, get, isoTime, newEntityId, NOW, run, tx, uniqueId } from './db.js';
+import { convertDbtManifest, isDbtManifest, otherDbtArtifact } from './dbt.js';
 import { ConflictError, getPipeline } from './repo.js';
 import {
   BUNDLE_FORMAT,
@@ -125,6 +126,11 @@ export function bundleFilename(bundle: AtlasBundle): string {
 /* ---------------------------------------------------------------- import */
 
 export class BundleError extends Error {}
+
+export interface ReadOptions {
+  /** A dbt `catalog.json`, used only when the file is a dbt manifest. */
+  catalog?: Record<string, any> | null;
+}
 
 /* ------------------------------------------------- format upgrade ladder */
 
@@ -306,10 +312,27 @@ function reaches(from: string, to: string, adjacency: Map<string, string[]>): bo
  * matching how inferred links already behave, so a foreign file with one bad
  * arrow still imports instead of being refused outright.
  */
-export function readBundle(input: unknown): BundleReadResult {
+export function readBundle(input: unknown, options: ReadOptions = {}): BundleReadResult {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     throw new BundleError('That file is not a JSON object.');
   }
+
+  // A dbt manifest is translated into a bundle first, then held to exactly the
+  // same checks as any other file. Its summary and anything it left behind are
+  // reported as warnings, so every caller that already shows those shows these.
+  const other = otherDbtArtifact(input);
+  if (other) {
+    throw new BundleError(
+      `That is a dbt ${other}.json. Import target/manifest.json instead${other === 'catalog' ? ', with this catalog alongside it for column types' : ''}.`,
+    );
+  }
+  if (isDbtManifest(input)) {
+    const { bundle, summary, notes } = convertDbtManifest(input, options.catalog);
+    const read = readBundle(bundle);
+    return { ...read, converted: summary, warnings: [...notes, ...read.warnings] };
+  }
+  if (options.catalog) throw new BundleError('--catalog only applies when importing a dbt manifest.json.');
+
   const raw = input as Record<string, any>;
 
   if (raw.format !== BUNDLE_FORMAT) {
@@ -436,8 +459,8 @@ export function validateBundle(input: unknown): AtlasBundle {
  * Everything below runs in one transaction, after `readBundle` has already had
  * the final say on the contents: an import lands whole or not at all.
  */
-export function importBundle(input: unknown, nameOverride?: string): ImportResult {
-  const { bundle, sourceVersion, upgrades, warnings } = readBundle(input);
+export function importBundle(input: unknown, nameOverride?: string, options: ReadOptions = {}): ImportResult {
+  const { bundle, sourceVersion, upgrades, warnings, converted } = readBundle(input, options);
 
   const pipeline = tx(() => {
     const graphId = uniqueId('graphs', nameOverride?.trim() || bundle.pipeline.name);
@@ -542,5 +565,6 @@ export function importBundle(input: unknown, nameOverride?: string): ImportResul
     source: { formatVersion: sourceVersion, generator: from, exportedAt: bundle.exportedAt ?? '' },
     upgrades,
     warnings,
+    ...(converted ? { converted } : {}),
   };
 }

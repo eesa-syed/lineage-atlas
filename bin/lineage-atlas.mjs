@@ -15,7 +15,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const server = (file) => import(resolve(here, '../server/dist', file));
 
 /** Everything `server/src/cli.ts` answers to. */
-const FILE_COMMANDS = new Set(['list', 'export', 'import', 'validate', 'version']);
+const FILE_COMMANDS = new Set(['list', 'export', 'import', 'validate', 'from-dbt', 'version']);
 
 const HELP = `lineage-atlas — a DAG documentation explorer for data pipelines
 
@@ -26,12 +26,16 @@ Usage
   lineage-atlas export <id> [file]    write a pipeline to an .atlas.json file
   lineage-atlas validate <file>       check a file without importing it
   lineage-atlas import <file> [name]  read an .atlas.json file in as a new pipeline
+                                      — or a dbt target/manifest.json, directly
+  lineage-atlas from-dbt <manifest.json> [file]
+                                      convert a dbt project to an .atlas.json file
   lineage-atlas version               print the app and file-format versions
 
 Options
   --db <file>     database file to open (any command)
   --port <n>      port to listen on; serve only (default: 5174, or the next free)
   --no-open       do not open a browser; serve only
+  --catalog <file>  dbt catalog.json for column types; import, validate, from-dbt
 
 Environment
   ATLAS_PORT      same as --port          ATLAS_DB       same as --db
@@ -81,6 +85,15 @@ function takeDbFlag(args) {
         process.exit(1);
       }
       process.env.ATLAS_DB = resolve(value);
+      i += 1;
+    } else if (arg === '--catalog') {
+      // Passed through: the CLI resolves it, alongside the file it belongs to.
+      const value = args[i + 1];
+      if (value === undefined || value.startsWith('--')) {
+        console.error('--catalog needs a value.');
+        process.exit(1);
+      }
+      operands.push(arg, value);
       i += 1;
     } else if (arg.startsWith('--')) {
       console.error(`Unknown option: ${arg}\n`);

@@ -14,7 +14,7 @@ edit, and share as a single file.
 ![Dependencies](https://img.shields.io/badge/native%20deps-none-success)
 
 [Why](#why-lineage-atlas) · [Features](#features) · [Installation](#installation) ·
-[Quick start](#quick-start) · [Sharing](#sharing-pipelines-the-atlasjson-file) ·
+[Import from dbt](#import-your-dbt-project) · [Quick start](#quick-start) · [Sharing](#sharing-pipelines-the-atlasjson-file) ·
 [AI agents](#working-with-ai-agents) · [Docs](#documentation)
 
 <br>
@@ -60,6 +60,7 @@ documentation and the search index are all the same thing.
 | *Does this table already exist?* | Build it and find out later | Check the asset catalogue, which flags anything undocumented |
 | *What does this step actually do?* | Read 200 lines of SQL | Read its prose logic flow, attached right to the node |
 | *How do I hand this to someone new?* | A slide deck that's out of date by next week | Send one `.atlas.json` file |
+| *Can I get started without drawing everything?* | No: every diagram tool starts blank | Import your dbt project's `manifest.json` in one command |
 
 ## The one idea: arrows follow from declarations
 
@@ -120,8 +121,9 @@ always upgraded on import.
 </tr>
 </table>
 
-Also included: free-form **tags** instead of fixed types (a tag always gets the
-same colour, derived from its text); **stewardship** fields (owner, created,
+Also included: **dbt import** (models, sources, tests and owners from
+`manifest.json`, column types from `catalog.json`); free-form **tags** instead
+of fixed types (a tag always gets the same colour, derived from its text); **stewardship** fields (owner, created,
 updated, last edited by) on every record; **date filters** to find stale
 documentation; any number of **isolated pipelines** in one install; **light and
 dark** themes; and a full **REST API** that drives everything the UI can do.
@@ -197,6 +199,30 @@ curl -s localhost:5174/api/version
 # {"name":"lineage-atlas","version":"1.0.0","bundleFormat":"lineage-atlas.pipeline","bundleVersion":8,...}
 ```
 
+## Import your dbt project
+
+Already use dbt? Skip drawing and see your own project in about 30 seconds:
+
+```bash
+cd your-dbt-project
+dbt docs generate      # writes target/manifest.json and target/catalog.json
+lineage-atlas import target/manifest.json --catalog target/catalog.json
+```
+
+That uses the `lineage-atlas` command from
+[step 3](#3-optional-install-the-lineage-atlas-command). Without it, run this
+from your Atlas checkout instead, with absolute paths:
+`npm run import -- /path/to/target/manifest.json --catalog /path/to/target/catalog.json`.
+
+Or, in the app, open the pipeline switcher, choose *Import from file…*, and
+select both files together.
+
+Every model, source, seed, snapshot and exposure becomes a step. Dependencies
+become edges, and each model folder (`staging`, `marts`) gets its own colour.
+Tables get their columns, types and dbt tests, and owners come from `meta.owner`
+or dbt groups. No SQL is copied. → [docs/DBT.md](docs/DBT.md) has the full
+mapping.
+
 ## Quick start
 
 1. **Explore the demo.** Click any step on the canvas and watch its lineage light
@@ -252,7 +278,8 @@ prints its path.
 | `lineage-atlas list` | List pipelines with their code and edge counts |
 | `lineage-atlas export <id> [file]` | Write a pipeline to an `.atlas.json` file |
 | `lineage-atlas validate <file>` | Check a file without importing it (exits `1` if it would be refused) |
-| `lineage-atlas import <file> ["Name"]` | Import a file as a **new** pipeline |
+| `lineage-atlas import <file> ["Name"]` | Import an `.atlas.json` or dbt `manifest.json` as a **new** pipeline (add `--catalog catalog.json` for column types) |
+| `lineage-atlas from-dbt <manifest.json> [file]` | Convert a dbt project to an `.atlas.json` file without importing it |
 | `lineage-atlas version` | Print the app and file-format versions |
 
 <details>
@@ -267,7 +294,8 @@ prints its path.
 | `npm run pipelines` | List pipelines with their code and edge counts |
 | `npm run export -- <id> [file]` | Write a pipeline to an `.atlas.json` file |
 | `npm run validate -- <file>` | Check a file without importing it |
-| `npm run import -- <file> ["Name"]` | Import a file as a new pipeline |
+| `npm run import -- <file> ["Name"]` | Import an `.atlas.json` or dbt `manifest.json` as a new pipeline |
+| `npm run from-dbt -- <manifest.json> [file]` | Convert a dbt project to an `.atlas.json` file |
 | `npm run typecheck` | Type-check without emitting |
 
 </details>
@@ -313,7 +341,7 @@ lineage-atlas import   analytics-warehouse-2026-09-13.atlas.json "Warehouse (fro
 
 `validate` runs that exact check and writes nothing, so you can use it as a CI
 gate. → [docs/FILE_FORMAT.md](docs/FILE_FORMAT.md) is the full specification, and
-the place to start if you want to generate files from dbt or another tool.
+the place to start if you want to generate files from another tool.
 
 ## Working with AI agents
 
@@ -357,6 +385,7 @@ server/   Express + node:sqlite API
   src/db.ts           schema, migrations, connection, tiny query helpers
   src/repo.ts         reads, mutations, pipeline CRUD, I/O and logic-flow writes
   src/bundle.ts       .atlas.json export, the upgrade ladder, validation, import
+  src/dbt.ts          dbt manifest.json (+ catalog.json) → .atlas.json translator
   src/cli.ts          list / export / validate / import from the terminal
   src/paths.ts        checkout vs. installed: where the database lives
   src/security.ts     loopback binding, Host/Origin checks, response headers
@@ -398,8 +427,10 @@ Atlas deliberately stays small. It is **not**:
 
 Known gaps, and contributions welcome:
 
-- No dbt/YAML importer yet. [The format spec](docs/FILE_FORMAT.md) is written for
-  exactly this.
+- Re-importing a dbt project creates a fresh pipeline. There's no merge that
+  keeps hand-written notes while updating the structure underneath.
+- No importers for other tools yet (Airflow, Dagster, SQLMesh).
+  [The format spec](docs/FILE_FORMAT.md) is written for exactly this.
 - The web UI doesn't identify its user, so browser edits are attributed to
   `ATLAS_USER` or the OS user. Scripts and agents should send an `X-Atlas-User`
   header.
@@ -415,6 +446,7 @@ Known gaps, and contributions welcome:
 | Document | What's inside |
 |---|---|
 | [User guide](docs/USER_GUIDE.md) | Every interaction, the keyboard shortcuts, and notes on the design |
+| [Importing from dbt](docs/DBT.md) | How dbt models, sources, tests and owners map into Atlas |
 | [Concepts](docs/CONCEPTS.md) | The model, and why it's shaped this way |
 | [File format](docs/FILE_FORMAT.md) | The formal `.atlas.json` spec, for anyone writing a producer |
 | [AI agents](docs/AI_AGENTS.md) | Driving Atlas from an agent: API surface and rules |

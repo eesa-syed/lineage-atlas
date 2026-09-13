@@ -36,6 +36,7 @@ npm run build        # includes the version check
 | The database schema, or a migration | `server/src/db.ts` |
 | Any read or mutation | `server/src/repo.ts` |
 | The `.atlas.json` format | `server/src/bundle.ts` + `docs/FILE_FORMAT.md` |
+| How a dbt project maps into Atlas | `server/src/dbt.ts` + `docs/DBT.md` |
 | An HTTP route | `server/src/index.ts` |
 | Startup: port selection, opening a browser, what the first lines print | `server/src/index.ts` (bottom) |
 | The installed `lineage-atlas` command, or its flags | `bin/lineage-atlas.mjs` |

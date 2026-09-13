@@ -51,10 +51,12 @@ export const api = {
    * for `fetch` would hold the text, the object graph and a second copy of the
    * text in memory at once, and the server has to parse it again regardless.
    */
-  importPipeline: (bundleText: string, name?: string) =>
+  /** `catalogText` is a dbt catalog.json to read alongside a manifest. Both are
+   * spliced into the envelope as text, still without parsing either here. */
+  importPipeline: (bundleText: string, name?: string, catalogText?: string) =>
     request<ImportResult>(`/pipelines/import${name ? `?name=${encodeURIComponent(name)}` : ''}`, {
       method: 'POST',
-      body: bundleText,
+      body: catalogText ? `{"bundle":${bundleText},"catalog":${catalogText}}` : bundleText,
     }),
 
   createCode: (graphId: string, input: { name: string; tags: string[]; x: number; y: number }) =>

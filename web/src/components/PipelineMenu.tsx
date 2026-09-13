@@ -9,7 +9,7 @@ export function PipelineMenu() {
   const renamePipeline = useAtlas((s) => s.renamePipeline);
   const removePipeline = useAtlas((s) => s.removePipeline);
   const exportPipeline = useAtlas((s) => s.exportPipeline);
-  const importPipelineFile = useAtlas((s) => s.importPipelineFile);
+  const importPipelineFiles = useAtlas((s) => s.importPipelineFiles);
   const relink = useAtlas((s) => s.relink);
 
   const [open, setOpen] = useState(false);
@@ -112,7 +112,9 @@ export function PipelineMenu() {
                 ＋ New empty pipeline
               </button>
               <button className="mi" role="menuitem" onClick={() => fileRef.current?.click()}>
-                ↑ Import from file…<span className="k">.atlas.json</span>
+                <span title="An .atlas.json file, or a dbt target/manifest.json — select catalog.json with it for column types">
+                  ↑ Import from file…<span className="k">.atlas.json · dbt</span>
+                </span>
               </button>
               <button
                 className="mi"
@@ -167,10 +169,11 @@ export function PipelineMenu() {
         ref={fileRef}
         type="file"
         accept=".json,application/json"
+        multiple
         hidden
         onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) void importPipelineFile(file);
+          const files = [...(e.target.files ?? [])];
+          if (files.length) void importPipelineFiles(files);
           e.target.value = '';
           setOpen(false);
         }}

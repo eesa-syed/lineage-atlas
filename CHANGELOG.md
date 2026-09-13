@@ -25,6 +25,23 @@ independent of the release version. Its history is in
 
 ### Added
 
+- **Import a dbt project.** `lineage-atlas import target/manifest.json` reads
+  a dbt manifest directly — no exporter, no plugin — and *Import from file…* in
+  the app accepts one too. Models, seeds, snapshots, sources and exposures
+  become codes; `depends_on` becomes the edges; each relation becomes an asset
+  with its documented columns and the generic tests on them; owners come from
+  `meta.owner` or the node's dbt group; the model folder becomes the main tag.
+  Pass `--catalog target/catalog.json` (or select both files in the app) and
+  every column arrives with its warehouse type. `from-dbt` writes the
+  translation out as an `.atlas.json` instead of importing it. SQL is never
+  copied, a table that is both built (by a seed or model) and declared as a
+  source becomes one asset, and primary keys come only from declared
+  constraints. Checked against dbt-labs/jaffle-shop on dbt 1.12: every edge
+  matches dbt's own `parent_map` — see
+  [docs/DBT.md](docs/DBT.md).
+- Selecting a dbt `catalog.json` or `run_results.json` by mistake is refused
+  with a message naming the file to use instead.
+
 - **Stewardship on every code and every asset** — an **owner**, a **created**
   and an **updated** date, and the **user who made that last edit**. Codes had
   an owner and two dates the database kept privately; now all four are on both

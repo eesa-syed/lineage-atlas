@@ -91,6 +91,8 @@ export interface ImportResult {
   upgrades: string[];
   /** Non-fatal repairs: skipped cycles, dangling references, and the like. */
   warnings: string[];
+  /** Set when the file was a dbt manifest: what was read from it. */
+  converted?: string;
 }
 
 /** Mirrors the server's `VersionInfo` — `GET /api/version`. */
