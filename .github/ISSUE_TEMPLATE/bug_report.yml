@@ -1,0 +1,103 @@
+name: Bug report
+description: Something in Atlas doesn't work the way it should.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this.
+
+        **Found a security problem?** Don't file it here — use
+        [private vulnerability reporting](https://github.com/eesa-syed/lineage-atlas/security/advisories/new)
+        instead (see [SECURITY.md](https://github.com/eesa-syed/lineage-atlas/blob/main/SECURITY.md)).
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what happened, and what you expected to happen instead.
+      placeholder: |
+        1. Imported jaffle-shop with `lineage-atlas from-dbt …`
+        2. Opened the Schema tab for `orders`
+        3. …
+
+        Expected: …
+        Actual: …
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Where does the problem show up?
+      options:
+        - Web UI — graph / canvas
+        - Web UI — rail, search or filters
+        - Web UI — inspector, schema or logic flows
+        - dbt import (from-dbt)
+        - .atlas.json import / export / validate
+        - REST API
+        - CLI or startup (ports, database location, npx)
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: version
+    attributes:
+      label: Version
+      description: >
+        Paste the output of `curl -s localhost:5174/api/version` (use your port),
+        or `lineage-atlas version`, or `npm run version:show -w server` in a checkout.
+      render: json
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: How are you running Atlas?
+      options:
+        - npx lineage-atlas (installed package)
+        - Checkout with npm run dev
+        - Checkout, built (npm run build && npm start)
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Node version (`node -v`), operating system, and browser if it's a UI bug.
+      placeholder: "Node 24.1.0, macOS 15, Chrome 140"
+    validations:
+      required: true
+
+  - type: textarea
+    id: validate
+    attributes:
+      label: Validator output (for file or import problems)
+      description: >
+        If a file is involved, run `npm run validate -- yourfile.atlas.json`
+        (or `lineage-atlas validate yourfile.atlas.json`) and paste the result.
+        It usually says exactly what is wrong.
+      render: shell
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and screenshots
+      description: Server output, browser console errors, or screenshots. Remove anything private first.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and this hasn't been reported.
+          required: true
+        - label: I removed any private data (table names, credentials, internal hostnames) from what I pasted.
+          required: true

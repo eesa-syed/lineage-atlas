@@ -1,0 +1,27 @@
+name: Documentation
+description: Something in the README or docs is wrong, missing, or unclear.
+title: "[Docs]: "
+labels: ["documentation"]
+body:
+  - type: input
+    id: location
+    attributes:
+      label: Where
+      description: File and section, or a link.
+      placeholder: "docs/DBT.md § Tests"
+    validations:
+      required: true
+
+  - type: textarea
+    id: issue
+    attributes:
+      label: What's wrong or missing
+      description: What the docs say, what actually happens, or what you went looking for and couldn't find.
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested wording
+      description: Optional — how you would put it.

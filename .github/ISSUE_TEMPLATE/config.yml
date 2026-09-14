@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/eesa-syed/lineage-atlas/security/advisories/new
+    about: Please report security problems privately, not as a public issue.
+  - name: Ask a question
+    url: https://github.com/eesa-syed/lineage-atlas/discussions
+    about: Questions about using Atlas, importing dbt, or driving it from an agent.

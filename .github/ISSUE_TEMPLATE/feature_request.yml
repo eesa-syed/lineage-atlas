@@ -1,0 +1,58 @@
+name: Feature request
+description: Suggest an improvement or a new capability.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Atlas deliberately stays small — it is not an orchestrator, an automatic
+        lineage scanner, or a merge tool (see
+        [Scope and limitations](https://github.com/eesa-syed/lineage-atlas#scope-and-limitations)).
+        Leading with the problem helps most, since there is often more than one way to solve it.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do, and what gets in the way today?
+      placeholder: "When a pipeline has 200 models, I can't find …"
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you'd like
+      description: How you imagine it working. Sketches and screenshots welcome.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives and workarounds
+      description: Anything you've tried, or other tools that handle this well.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Web UI
+        - dbt import
+        - Other importers (Airflow, Dagster, SQLMesh, …)
+        - .atlas.json file format
+        - REST API / AI agents
+        - CLI
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Contributing
+      options:
+        - label: I'd be willing to open a pull request for this.

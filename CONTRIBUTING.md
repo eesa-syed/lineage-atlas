@@ -136,7 +136,11 @@ what you did, what happened, and what you expected. If it involves a file,
 attach the output of `npm run validate -- yourfile.atlas.json` — it usually says
 exactly what is wrong.
 
+Security problems are the exception: don't open a public issue — follow
+[SECURITY.md](SECURITY.md) and report them privately.
+
 ## Code of conduct
 
 Be decent to people. Assume good faith, take criticism about code as being about
-code, and leave the project friendlier than you found it.
+code, and leave the project friendlier than you found it. Participation is
+covered by the [Code of Conduct](CODE_OF_CONDUCT.md).

@@ -447,6 +447,9 @@ Atlas is a **single-user, local-first** tool with no login system.
 - To serve a team, set `ATLAS_HOST` and `ATLAS_ALLOWED_HOSTS`, and only do that on
   a network you trust. Anyone who can reach the API can edit it.
 
+Found a vulnerability? Please report it privately. [SECURITY.md](SECURITY.md)
+explains how.
+
 ## Scope and limitations
 
 Atlas deliberately stays small. It is **not**:
@@ -491,7 +494,8 @@ Known gaps, and contributions welcome:
 
 Issues and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) covers
 setup, the conventions worth knowing, and the process for changing the file
-format.
+format. Everyone taking part is asked to follow the
+[Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 
