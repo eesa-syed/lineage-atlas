@@ -159,6 +159,47 @@ independent of the release version. Its history is in
   the whole group. The Schema tab takes the same gestures to highlight several
   tables.
 
+- **Short-form `.atlas.json` files.** Everything Atlas can work out may be left
+  out: `position` defaults to array order; an omitted `assetRef` resolves to the
+  one asset whose `name` equals the link's `path`; an omitted `producedBy`
+  resolves to the one code that outputs the asset; codes with no `x`/`y` are
+  laid out left→right by depth. Each is reported as a `filled in` note
+  (`notes` over HTTP), separate from repairs. Explicit values, including `null`,
+  are never overridden, so exported files read exactly as before.
+- **`import --relink` / `validate --relink`** (HTTP `relink`) derive edges from
+  declared inputs and outputs in the same transaction. An asset with
+  `producedBy: null` implies no edges — the way to document shared-state tables
+  (run registries, log sinks) without wiring every writer to every reader — and
+  an omitted `producedBy` on an asset several codes write is left empty with a
+  warning rather than guessed.
+- **`import --replace <pipelineId>`** (HTTP `replace`) swaps a pipeline's
+  contents for a file's in one transaction, keeping its id so `?graph=` links
+  survive an edit → re-import loop. Refuses a pipeline that does not exist.
+- **`--no-seed` / `ATLAS_NO_SEED=1`**: a fresh database without the demo pipeline.
+- **Provenance (file format 9).** Codes and asset links take an optional
+  `provenance: {source, ref}` — `doc`, `code`, `inferred` or `human`, and where.
+  Editable in the inspector and the input/output form, shown on each input and
+  output, and filterable with an *Evidence* chip per source. Format 8 files
+  import unchanged.
+- **`GET /api/graph?view=summary`** and **`lineage-atlas summary <id>`**: the
+  topology only — ids, names, tags, status, `[source, target]` edges — for
+  agents asking routine questions about shape.
+- **`lineage-atlas status`** reports whether an Atlas is running and on which
+  port, version and database, without starting anything or opening a database.
+  `GET /api/version` now includes `db`.
+- **`lineage-atlas install-skill [--project] [--link]`** installs the Claude Code
+  skill outside the checkout; `lineage-atlas version` reports installed copies
+  and flags stale ones. The npm package now ships `.claude/skills/`.
+- **`lineage-atlas scan <dir>`** drafts a short-form bundle from Python, SQL and
+  other source files: one code per file with recognisable I/O, candidate paths
+  from S3/GCS URIs, bucket/key constants, SQL, DynamoDB tables and pandas/Spark
+  calls. Every link is tagged `unverified` with `provenance: inferred` and a
+  `file:line` ref.
+- Validate warns when asset names, or a link path and an asset name, differ
+  only in placeholder spelling (`<id>` / `{run_id}` / `${id}`). Nothing is merged.
+- `npm run check:docs` (part of `build`) fails when the agent docs mention a
+  field the file format dropped, or quote the wrong format version.
+
 ### Changed
 
 - **Importing a `.atlas.json` over HTTP is no longer capped at 25 MB.** The
@@ -197,6 +238,18 @@ independent of the release version. Its history is in
   tab's own search instead of switching to Flow.
 
 ### Fixed
+
+- **The skill documented `sampleRows`**, which format 8 removed, in the
+  schema `PUT` body — contradicting itself a few sections later.
+- **A busy port now says what holds it.** The first line names another Lineage
+  Atlas (with its version and database) or "another program", instead of being
+  buried under npm's error output.
+- **`npm run import -- file.json` from a checkout** resolved relative paths
+  against `server/`. File arguments and `ATLAS_DB` now resolve from the folder
+  the command was run in.
+- `lineage-atlas export <unknown id>` printed a stack trace instead of the error.
+- `status`, `scan`, `install-skill` and `version` no longer open (and create) a
+  database.
 
 - **The top bar showed a hardcoded username** ("SE / syedeesa") to everyone who
   ran Atlas. It now shows the name edits from the browser are actually recorded

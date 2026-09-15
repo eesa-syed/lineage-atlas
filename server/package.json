@@ -15,6 +15,10 @@
     "import": "tsx src/cli.ts import",
     "validate": "tsx src/cli.ts validate",
     "from-dbt": "tsx src/cli.ts from-dbt",
+    "summary": "tsx src/cli.ts summary",
+    "scan": "tsx src/cli.ts scan",
+    "status": "tsx src/cli.ts status",
+    "install-skill": "tsx src/cli.ts install-skill",
     "version:show": "tsx src/cli.ts version"
   },
   "dependencies": {

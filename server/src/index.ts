@@ -5,8 +5,9 @@ import type { AddressInfo } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ACTOR_HEADER, resolveActor } from './actor.js';
-import { DB_PATH, DEFAULT_GRAPH_ID } from './db.js';
+import { DB_PATH, DEFAULT_GRAPH_ID, NO_SEED } from './db.js';
 import { isCheckout } from './paths.js';
+import { probeAtlas } from './status.js';
 import { HOST, checkHost, checkOrigin, securityHeaders } from './security.js';
 import { seed } from './seed.js';
 import * as repo from './repo.js';
@@ -15,7 +16,7 @@ import { BundleError, bundleFilename, exportPipeline, importBundle, readBundle }
 import { APP_NAME, APP_TITLE, APP_VERSION, BUNDLE_FORMAT, BUNDLE_VERSION, MIN_BUNDLE_VERSION } from './version.js';
 import type { VersionInfo } from './types.js';
 
-seed(); // no-op once the database has content
+if (!NO_SEED) seed(); // no-op once the database has content
 
 const app = express();
 app.disable('x-powered-by');
@@ -52,6 +53,9 @@ const notFound = (res: Response, what: string) => res.status(404).json({ error: 
 /** Which pipeline a request is about: `?graph=` if given, else the seeded one. */
 const graphOf = (req: Request) => String(req.query.graph ?? DEFAULT_GRAPH_ID);
 
+/** `?relink=1`, `?relink=true`, or `relink: true` in a JSON envelope. */
+const flag = (value: unknown) => value === true || ['1', 'true', 'yes'].includes(String(value ?? '').toLowerCase());
+
 /**
  * Who to credit for a write. `X-Atlas-User` if the caller says, otherwise the
  * machine's own name — never empty, so `updatedBy` always answers. Attribution
@@ -75,6 +79,7 @@ app.get('/api/version', (_req, res) => {
     minBundleVersion: MIN_BUNDLE_VERSION,
     node: process.versions.node,
     user: resolveActor(),
+    db: DB_PATH,
   };
   res.json(info);
 });
@@ -114,8 +119,11 @@ app.get('/api/pipelines/:id/export', wrap((req, res) => {
  * upgraded from, and what would be repaired, before committing to it.
  */
 app.post('/api/pipelines/validate', wrap((req, res) => {
-  const { bundle, catalog } = req.body ?? {};
-  const { bundle: read, sourceVersion, upgrades, warnings, converted } = readBundle(bundle ?? req.body, { catalog });
+  const { bundle, catalog, relink } = req.body ?? {};
+  const { bundle: read, sourceVersion, upgrades, warnings, notes, converted } = readBundle(bundle ?? req.body, {
+    catalog,
+    relink: flag(relink ?? req.query.relink),
+  });
   res.json({
     ok: true,
     pipeline: read.pipeline,
@@ -123,6 +131,7 @@ app.post('/api/pipelines/validate', wrap((req, res) => {
     source: { formatVersion: sourceVersion, generator: read.generator, exportedAt: read.exportedAt },
     upgrades,
     warnings,
+    notes,
     ...(converted ? { converted } : {}),
   });
 }));
@@ -136,18 +145,33 @@ app.post('/api/pipelines/validate', wrap((req, res) => {
  *
  * A dbt `manifest.json` is accepted in place of a bundle, and the envelope may
  * carry its `catalog.json` as `catalog` for column types (see `dbt.ts`).
+ *
+ * `relink` derives edges from the declarations; `replace=<pipelineId>` swaps
+ * that pipeline's contents in place, keeping its id. Both may come as query
+ * parameters or envelope fields.
  */
 app.post('/api/pipelines/import', wrap((req, res) => {
-  const { bundle, name, catalog } = req.body ?? {};
+  const { bundle, name, catalog, relink, replace } = req.body ?? {};
   const chosen = name ?? req.query.name;
-  res.status(201).json(importBundle(bundle ?? req.body, chosen ? String(chosen) : undefined, { catalog }));
+  const target = replace ?? req.query.replace;
+  const result = importBundle(bundle ?? req.body, chosen ? String(chosen) : undefined, {
+    catalog,
+    relink: flag(relink ?? req.query.relink),
+    replace: target ? String(target) : undefined,
+  });
+  res.status(result.replaced ? 200 : 201).json(result);
 }));
 
 /* ----------------------------------------------------------------- graph */
 
+/**
+ * `?view=summary` answers with ids, names, tags, status and `[source, target]`
+ * edges only — a fraction of the size, and enough for any question about shape.
+ */
 app.get('/api/graph', wrap((req, res) => {
   const graphId = graphOf(req);
   if (!repo.getPipeline(graphId)) return notFound(res, 'Pipeline');
+  if (req.query.view === 'summary') return res.json(repo.getGraphSummary(graphId));
   res.json({ ...repo.getGraph(graphId), tags: repo.listTags(graphId), pipelineId: graphId });
 }));
 
@@ -223,7 +247,7 @@ app.get('/api/codes/:id/linkable-assets', wrap((req, res) => {
 }));
 
 app.post('/api/codes/:id/asset-links', wrap((req, res) => {
-  const { direction, path, detail, tags, documented } = req.body ?? {};
+  const { direction, path, detail, tags, documented, provenance } = req.body ?? {};
   const result = repo.addAssetLink(
     req.params.id,
     {
@@ -232,6 +256,7 @@ app.post('/api/codes/:id/asset-links', wrap((req, res) => {
       detail: String(detail ?? ''),
       tags: Array.isArray(tags) ? tags.map(String) : [],
       documented: Boolean(documented),
+      provenance,
     },
     actorOf(req),
   );
@@ -439,6 +464,18 @@ function announce(port: number): void {
   if (servingUi && shouldOpenBrowser()) openBrowser(url);
 }
 
+/**
+ * Names what is holding a busy port, in one line. The line that matters has to
+ * come first and stand alone: run through npm, it is followed by a screenful of
+ * `npm error` noise, and the tail of that is all an agent or a CI log shows.
+ */
+async function describeBusy(port: number): Promise<string> {
+  const atlas = await probeAtlas(port);
+  if (!atlas) return `Port ${port} is already in use by another program`;
+  const db = atlas.db ? `, db ${atlas.db}` : '';
+  return `Port ${port} is already in use by Lineage Atlas ${atlas.version}${db} (it answered /api/version)`;
+}
+
 function listen(index: number): void {
   const port = candidates[index];
   const server = app.listen(port, HOST);
@@ -448,9 +485,19 @@ function listen(index: number): void {
       console.error(err);
       process.exit(1);
     }
-    if (index + 1 < candidates.length) return listen(index + 1);
-    console.error(`Port ${port} is already in use. Set ATLAS_PORT to choose another.`);
-    process.exit(1);
+    void describeBusy(port).then((busy) => {
+      if (index + 1 < candidates.length) {
+        if (port) console.log(`${busy}; trying ${candidates[index + 1] || 'any free port'}.`);
+        return listen(index + 1);
+      }
+      console.error(
+        `${busy}. Not starting.\n` +
+          (busy.includes('Lineage Atlas')
+            ? `  It is probably already running — use it, or run \`lineage-atlas status\`. Pick a different ATLAS_PORT (or --port) to start a second one.`
+            : '  Set ATLAS_PORT (or --port) to choose another port.'),
+      );
+      process.exit(1);
+    });
   });
 }
 

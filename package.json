@@ -11,6 +11,7 @@
     "server/dist/",
     "web/dist/",
     "docs/",
+    ".claude/skills/",
     "CHANGELOG.md"
   ],
   "workspaces": [
@@ -19,16 +20,21 @@
   ],
   "scripts": {
     "dev": "concurrently -n server,web -c cyan,magenta \"npm run dev -w server\" \"npm run dev -w web\"",
-    "build": "npm run check:version && npm run build -w server && npm run build -w web",
+    "build": "npm run check:version && npm run check:docs && npm run build -w server && npm run build -w web",
     "start": "npm run start -w server",
     "seed": "npm run seed -w server",
     "typecheck": "npm run typecheck -w server && npm run typecheck -w web",
     "check:version": "node scripts/check-version.mjs",
+    "check:docs": "node scripts/check-docs.mjs",
     "pipelines": "npm run pipelines -w server",
     "export": "npm run export -w server --",
     "import": "npm run import -w server --",
     "validate": "npm run validate -w server --",
     "from-dbt": "npm run from-dbt -w server --",
+    "summary": "npm run summary -w server --",
+    "scan": "npm run scan -w server --",
+    "status": "npm run status -w server --",
+    "install-skill": "npm run install-skill -w server --",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {

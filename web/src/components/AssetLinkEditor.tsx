@@ -1,16 +1,21 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
 import { useAtlas } from '../state/store';
-import { assetLinkTag, normaliseTag, tagColor, type AssetLink, type AssetLinkInput, type AssetSummary } from '../types';
+import {
+  PROVENANCE_LABEL, PROVENANCE_SOURCES, assetLinkTag, normaliseTag, tagColor,
+  type AssetLink, type AssetLinkInput, type AssetSummary, type ProvenanceSource,
+} from '../types';
 
 interface Draft {
   path: string;
   detail: string;
   tags: string[];
   documented: boolean;
+  provenanceSource: ProvenanceSource | '';
+  provenanceRef: string;
 }
 
-const EMPTY: Draft = { path: '', detail: '', tags: [], documented: true };
+const EMPTY: Draft = { path: '', detail: '', tags: [], documented: true, provenanceSource: '', provenanceRef: '' };
 
 /** Add / edit / remove one code's inputs or outputs. */
 export function AssetLinkList({
@@ -59,7 +64,10 @@ export function AssetLinkList({
   const startEdit = (asset: AssetLink) => {
     setAdding(false);
     setEditingId(asset.id);
-    setDraft({ path: asset.path, detail: asset.detail, tags: asset.tags, documented: !!asset.assetId });
+    setDraft({
+      path: asset.path, detail: asset.detail, tags: asset.tags, documented: !!asset.assetId,
+      provenanceSource: asset.provenance?.source ?? '', provenanceRef: asset.provenance?.ref ?? '',
+    });
   };
 
   const close = () => {
@@ -77,6 +85,7 @@ export function AssetLinkList({
       detail: draft.detail.trim(),
       tags: draft.tags,
       documented: draft.documented,
+      provenance: draft.provenanceSource ? { source: draft.provenanceSource, ref: draft.provenanceRef.trim() } : null,
     };
     if (editingId) void updateAssetLink(codeId, editingId, payload);
     else void addAssetLink(codeId, payload);
@@ -152,6 +161,32 @@ export function AssetLinkList({
             if (e.key === 'Escape') close();
           }}
         />
+      </div>
+
+      <div style={{ display: 'flex', gap: 5, marginTop: 5 }}>
+        <select
+          className="pipe-input"
+          style={{ flex: '0 0 auto', width: 'auto' }}
+          value={draft.provenanceSource}
+          aria-label="Evidence"
+          onChange={(e) => setDraft({ ...draft, provenanceSource: e.target.value as ProvenanceSource | '' })}
+        >
+          <option value="">evidence: unknown</option>
+          {PROVENANCE_SOURCES.map((source) => (
+            <option key={source} value={source}>
+              {PROVENANCE_LABEL[source]}
+            </option>
+          ))}
+        </select>
+        {draft.provenanceSource && (
+          <input
+            className="pipe-input"
+            value={draft.provenanceRef}
+            placeholder="where — route.py:12"
+            aria-label="Evidence reference"
+            onChange={(e) => setDraft({ ...draft, provenanceRef: e.target.value })}
+          />
+        )}
       </div>
 
       <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--ink-2)', margin: '6px 0 2px' }}>
@@ -255,7 +290,14 @@ export function AssetLinkList({
               title={asset.assetId ? 'Open schema' : asset.path}
             >
               <span className={`p${asset.assetId ? ' linked' : ''}`}>{asset.path}</span>
-              <span className="s">{asset.detail || assetLinkTag(asset) || 'asset'}</span>
+              <span className="s">
+                {asset.detail || assetLinkTag(asset) || 'asset'}
+                {asset.provenance && (
+                  <span className={`evidence ev-${asset.provenance.source}`} title={asset.provenance.ref || undefined}>
+                    {PROVENANCE_LABEL[asset.provenance.source]}
+                  </span>
+                )}
+              </span>
             </button>
             <span className="io-actions">
               <button className="linkbtn" onClick={() => startEdit(asset)} title="Edit">

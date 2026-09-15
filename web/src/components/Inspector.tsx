@@ -3,8 +3,8 @@ import { useAtlas } from '../state/store';
 import { downstream, upstream } from '../lib/lineage';
 import { AssetLinkList } from './AssetLinkEditor';
 import {
-  STATUS_COLOR, assetLinkTag, codeColor, formatStamp, fromLocalInput, primaryTag, tagColor, toLocalInput,
-  type Code, type CodePatch, type CodeStatus,
+  PROVENANCE_LABEL, PROVENANCE_SOURCES, STATUS_COLOR, assetLinkTag, codeColor, formatStamp, fromLocalInput, primaryTag, tagColor, toLocalInput,
+  type Code, type CodePatch, type CodeStatus, type Provenance, type ProvenanceSource,
 } from '../types';
 
 const STATUSES: CodeStatus[] = ['active', 'inactive'];
@@ -18,6 +18,15 @@ interface MetaDraft {
   createdAt: string;
   updatedAt: string;
   updatedBy: string;
+  /** `''` is "unknown", which clears it. */
+  provenanceSource: ProvenanceSource | '';
+  provenanceRef: string;
+}
+
+/** `inferred · jobs/route.py:88`, or a dash when nothing is recorded. */
+export function describeProvenance(provenance: Provenance | null): string {
+  if (!provenance) return '—';
+  return `${PROVENANCE_LABEL[provenance.source]}${provenance.ref ? ` · ${provenance.ref}` : ''}`;
 }
 
 const draftOf = (code: Code): MetaDraft => ({
@@ -27,6 +36,8 @@ const draftOf = (code: Code): MetaDraft => ({
   createdAt: toLocalInput(code.createdAt),
   updatedAt: toLocalInput(code.updatedAt),
   updatedBy: code.updatedBy,
+  provenanceSource: code.provenance?.source ?? '',
+  provenanceRef: code.provenance?.ref ?? '',
 });
 
 /**
@@ -45,6 +56,10 @@ function changedFields(code: Code, draft: MetaDraft): CodePatch {
   if (draft.owner !== code.owner) patch.owner = draft.owner;
   if (draft.status !== code.status) patch.status = draft.status;
   if (draft.updatedBy !== code.updatedBy) patch.updatedBy = draft.updatedBy;
+  const ref = draft.provenanceRef.trim();
+  if (draft.provenanceSource !== (code.provenance?.source ?? '') || ref !== (code.provenance?.ref ?? '')) {
+    patch.provenance = draft.provenanceSource ? { source: draft.provenanceSource, ref } : null;
+  }
 
   for (const field of ['createdAt', 'updatedAt'] as const) {
     if (draft[field] === toLocalInput(code[field])) continue;
@@ -276,6 +291,9 @@ export function Inspector() {
               <dd>{code.owner || '—'}</dd>
               <dt>Status</dt>
               <dd>{code.status}</dd>
+              {/* The evidence behind this code, as opposed to the workflow tags on it. */}
+              <dt>Evidence</dt>
+              <dd title={code.provenance?.ref || undefined}>{describeProvenance(code.provenance)}</dd>
               <dt>Upstream</dt>
               <dd>{up} codes</dd>
               <dt>Downstream</dt>
@@ -335,6 +353,36 @@ export function Inspector() {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <label className="rail-label" htmlFor="meta-evidence">
+                  Evidence
+                </label>
+                <select
+                  id="meta-evidence"
+                  className="pipe-input"
+                  style={{ marginTop: 4 }}
+                  value={metaDraft.provenanceSource}
+                  onChange={(e) => setMetaDraft({ ...metaDraft, provenanceSource: e.target.value as ProvenanceSource | '' })}
+                >
+                  <option value="">unknown</option>
+                  {PROVENANCE_SOURCES.map((source) => (
+                    <option key={source} value={source}>
+                      {PROVENANCE_LABEL[source]}
+                    </option>
+                  ))}
+                </select>
+                {metaDraft.provenanceSource && (
+                  <input
+                    className="pipe-input"
+                    style={{ marginTop: 4 }}
+                    value={metaDraft.provenanceRef}
+                    placeholder="where — DESIGN.md §14.2, jobs/route.py:88"
+                    aria-label="Evidence reference"
+                    onChange={(e) => setMetaDraft({ ...metaDraft, provenanceRef: e.target.value })}
+                  />
+                )}
               </div>
 
               {/* Leave these three alone and saving stamps them as usual; change

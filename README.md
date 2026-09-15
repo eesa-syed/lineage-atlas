@@ -172,6 +172,12 @@ cd lineage-atlas
 npm install
 ```
 
+> [!TIP]
+> **On Windows**, clone into a short path such as `C:\src\lineage-atlas`. A deep
+> folder can fail with `fatal: '$GIT_DIR' too big` or with over-long paths under
+> `node_modules`. If you can't move it, run
+> `git config --global core.longpaths true` first.
+
 ### 2. Run it
 
 | Mode | Command | Open | Best for |
@@ -180,7 +186,8 @@ npm install
 | **Development** | `npm run dev` | <http://localhost:5173> | Changing Atlas. Hot reload, with Vite proxying `/api` to the API on `5174`. |
 
 The first start creates the database and loads a demo analytics warehouse, so
-you have something to explore right away.
+you have something to explore right away. Start with `--no-seed` (or
+`ATLAS_NO_SEED=1`) for an empty database instead.
 
 ### 3. Optional: install the `lineage-atlas` command
 
@@ -202,9 +209,16 @@ checkout, it keeps using the checkout's `data/atlas.db` and port `5174`. Pass
 ### Verify it's running
 
 ```bash
+lineage-atlas status     # or: npm run status
+# Running: Lineage Atlas 1.0.0 on http://localhost:5174 · file format 9 · db …/data/atlas.db
+
 curl -s localhost:5174/api/version
-# {"name":"lineage-atlas","version":"1.0.0","bundleFormat":"lineage-atlas.pipeline","bundleVersion":8,...}
+# {"name":"lineage-atlas","version":"1.0.0","bundleFormat":"lineage-atlas.pipeline","bundleVersion":9,...}
 ```
+
+`status` starts nothing and opens no database, so it is safe to run at any time.
+If a start fails because the port is taken, the first line of the error says
+whether it was another Atlas (with its version and database) or some other program.
 
 ## Import your dbt project
 
@@ -218,8 +232,9 @@ lineage-atlas import target/manifest.json --catalog target/catalog.json
 
 That uses the `lineage-atlas` command from
 [step 3](#3-optional-install-the-lineage-atlas-command). Without it, run this
-from your Atlas checkout instead, with absolute paths:
-`npm run import -- /path/to/target/manifest.json --catalog /path/to/target/catalog.json`.
+from your Atlas checkout instead:
+`npm run import -- /path/to/target/manifest.json --catalog /path/to/target/catalog.json`
+(relative paths resolve from the folder you run it in).
 
 Or, in the app, open the pipeline switcher, choose *Import from file…*, and
 select both files together.
@@ -249,12 +264,22 @@ Atlas ships a **Claude Code skill** that teaches an agent the whole workflow:
 importing, tracing, writing logic flows, and tagging its own work for review.
 
 **1. Make the skill available.** It's already active when you run Claude Code
-inside this repository. To use it from your dbt project, copy it into your
+inside this repository. To use it from your dbt project, install it into your
 personal skills:
 
 ```bash
-cp -r .claude/skills/lineage-atlas ~/.claude/skills/
+lineage-atlas install-skill            # → ~/.claude/skills/lineage-atlas
+lineage-atlas install-skill --project  # → ./.claude/skills/lineage-atlas, for one project
 ```
+
+From a checkout without the command, `npm run install-skill`. Re-run it after
+updating Atlas; `lineage-atlas version` reports an installed copy that has gone
+stale. Add `--link` to symlink it instead, so it never does.
+
+**Not a dbt project?** `lineage-atlas scan ./jobs draft.atlas.json` drafts an
+inventory from Python, SQL and other source files, with every input and output
+marked unverified for the agent (or you) to confirm. Then
+`lineage-atlas import draft.atlas.json --relink`.
 
 **2. Ask for the work.** With Atlas running, from your dbt project folder:
 
@@ -369,7 +394,7 @@ lineage-atlas import   analytics-warehouse-2026-09-13.atlas.json "Warehouse (fro
 ```jsonc
 {
   "format": "lineage-atlas.pipeline",      // always this value
-  "formatVersion": 8,                      // the file format, not the app version
+  "formatVersion": 9,                      // the file format, not the app version
   "generator": { "name": "lineage-atlas", "version": "1.0.0" },
   "exportedAt": "2026-09-13T05:37:22Z",
   "counts": { "codes": 18, "edges": 22, "assets": 14 },
@@ -383,11 +408,13 @@ lineage-atlas import   analytics-warehouse-2026-09-13.atlas.json "Warehouse (fro
 **Backward compatible, forward refusing:**
 
 - **Older files are upgraded** on import, one format version at a time, and every
-  upgrade step is reported. Formats 1 through 8 all import.
+  upgrade step is reported. Formats 1 through 9 all import.
 - **Files from a newer build are refused** with a message naming both versions,
   rather than guessed at.
-- **Import always creates a new pipeline.** Ids are local to the file and
-  remapped, so importing the same file twice never collides or overwrites.
+- **Import creates a new pipeline.** Ids are local to the file and remapped, so
+  importing the same file twice never collides. `--replace <id>` is the
+  deliberate exception: it swaps that pipeline's contents for the file's and
+  keeps its id, for an edit → re-import → review loop.
 - **Meaningless files are refused before anything is written.** Files with a safe
   reading (a dangling reference, a duplicate edge, an edge that would create a
   cycle) import whole, and every repair is reported.
@@ -457,9 +484,10 @@ Atlas deliberately stays small. It is **not**:
 - **An orchestrator.** It never runs anything.
 - **An automatic lineage scanner.** The graph is written by people. That's the
   trade: it can capture intent, which a parser can't recover, and it can be
-  wrong, which a parser can't be.
-- **A merge tool.** Import always creates a new pipeline. Merging would need a
-  conflict policy for every step.
+  wrong, which a parser can't be. `lineage-atlas scan` only proposes candidates,
+  every one marked unverified and inferred; nothing it writes is presented as fact.
+- **A merge tool.** Import creates a new pipeline, or replaces one wholesale.
+  Merging would need a conflict policy for every step.
 
 Known gaps, and contributions welcome:
 

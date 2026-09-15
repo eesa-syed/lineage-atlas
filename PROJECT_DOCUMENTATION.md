@@ -21,7 +21,7 @@ records:
 - a **logic flow** — prose steps describing what it does internally (no
   source code is ever captured or stored),
 - and, for any input/output that names a **documented asset**, a full
-  **schema** page (columns, types, keys, tests, sample rows, and both
+  **schema** page (columns, types, keys, tests, and both
   directions of lineage).
 
 Edges between codes are **inferred from data flow**: if code A outputs
@@ -109,8 +109,14 @@ Project tracker/
 │       ├── types.ts            every shared TypeScript type + the .atlas.json bundle format + legacy v1 shape
 │       ├── repo.ts             all reads and mutations: graph, codes, tags, edges, assets, asset links, flows, pipelines
 │       ├── bundle.ts           .atlas.json export, the format upgrade ladder, validation, import
+│       ├── bundle-name.ts      the `<pipeline>-<date>.atlas.json` filename, importable without the database
 │       ├── dbt.ts              dbt manifest.json (+ catalog.json) → bundle translator
-│       ├── cli.ts              `list | export | validate | import | version` from the terminal
+│       ├── layout.ts           layered left→right layout for codes that arrive without x/y
+│       ├── provenance.ts       reading provenance ({source, ref}) and placeholder-insensitive path keys
+│       ├── scan.ts             `scan <dir>`: a draft bundle from source files, every link inferred
+│       ├── skill.ts            `install-skill`: copies/links the Claude Code skill, stamps its version
+│       ├── status.ts           `status` and the busy-port probe — never opens the database
+│       ├── cli.ts              `list | summary | export | validate | import | from-dbt | scan | status | install-skill | version`
 │       ├── index.ts            Express app: routes, error handling, static hosting of the built web app
 │       ├── seed.ts             seeds (or force-reseeds) the demo "warehouse" pipeline
 │       ├── seed-data.ts        the demo pipeline's raw data: 18 codes, their inputs/outputs, asset schemas
@@ -443,7 +449,7 @@ other three places that legitimately need raw access). Grouped by concern:
   opening its docs. Codes are ordered by `(x, y)` — top-left to bottom-right,
   a stable and meaningful default order for the rail.
 - `getFlow(codeId)` — a code's ordered logic steps.
-- `getAsset(assetId)` — a full asset: columns, sample rows, producer,
+- `getAsset(assetId)` — a full asset: columns, producer,
   every consuming code (`consumedBy`, derived from `asset_links WHERE
   direction='input'`), and two derived booleans, `certified`/`containsPii`,
   computed from whether the **producer's tags** include `certified`/`pii`
@@ -502,7 +508,7 @@ other three places that legitimately need raw access). Grouped by concern:
   rejects a duplicate name in the same pipeline) and delete (asset links
   survive deletion; they just stop resolving to a schema page).
 - `saveAssetSchema(assetId, input)` — replaces an asset's materialization,
-  description, columns, and sample rows **wholesale** in one transaction
+  description and columns **wholesale** in one transaction
   (delete-then-reinsert, like `saveFlow` does for logic steps) — simpler and
   less racy than diffing individual rows for something edited as a whole
   form.
@@ -526,7 +532,7 @@ for the normative spec; this section covers the module.
 **Export**
 
 - `exportPipeline(graphId)` -> `AtlasBundle` — walks the pipeline's codes (with
-  tags, flow steps, and asset links), assets (with columns and sample rows), and
+  tags, flow steps, and asset links), assets (with columns), and
   edges, and assembles the versioned envelope: `format` / `formatVersion` /
   `generator` / `exportedAt` / `counts` / `pipeline` / `codes` / `edges` /
   `assets`. All ids in the output are the **live database ids**; remapping to
@@ -594,8 +600,8 @@ treated 2 through 5 as already current.
   `nameOverride` or the bundle's own, either way through `uniqueId` so a
   re-import never collides); inserts codes, remapping bundle-local ids to fresh
   db ids in a `Map`, with their tags and flow steps; then assets (remapped the
-  same way, `producedBy` resolved through the code map) with their columns and
-  sample rows; then asset links (resolved through **both** maps); then edges
+  same way, `producedBy` resolved through the code map) with their columns;
+  then asset links (resolved through **both** maps); then edges
   (resolved through the code map). Because `readBundle` has already removed
   self-loops, duplicates and cycle-formers, what reaches the insert is safe.
 
@@ -603,8 +609,8 @@ treated 2 through 5 as already current.
   `generator` that wrote the file, the upgrade notes and the warnings — which is
   what the UI toast, the browser console and the CLI all report.
 
-  **An import either lands whole or not at all**, and **always creates a new
-  pipeline** — there is no merge-into-existing mode.
+  **An import either lands whole or not at all**, and creates a new pipeline
+  unless `replace` names one to overwrite in place — there is no merge mode.
 
 ### 6.5 `server/src/cli.ts`
 
@@ -761,8 +767,8 @@ violation, `422` invalid bundle, `500` unexpected).
 | PATCH | `/api/pipelines/:id` | `{ name?, description? }` | 404 if missing |
 | DELETE | `/api/pipelines/:id` | — | Cascades everything in it; 409 if it's the last pipeline |
 | GET | `/api/pipelines/:id/export` | — | Downloads a `.atlas.json` (sets `Content-Disposition`) |
-| POST | `/api/pipelines/validate` | `{ bundle }` (or the bundle itself as the whole body) | Runs the import gate and **writes nothing**: `{ ok, pipeline, counts, source, upgrades, warnings }`; 422 if it would be refused |
-| POST | `/api/pipelines/import` | `{ bundle, name? }` (or the bundle itself as the whole body) | Creates a **new** pipeline. Returns `{ pipeline, source, upgrades, warnings }` — **not** a bare pipeline; 422 on an invalid/unsupported file |
+| POST | `/api/pipelines/validate` | `{ bundle, relink? }` (or the bundle itself as the whole body, with `?relink=1`) | Runs the import gate and **writes nothing**: `{ ok, pipeline, counts, source, upgrades, warnings, notes }`; 422 if it would be refused |
+| POST | `/api/pipelines/import` | `{ bundle, name?, relink?, replace? }` (or the bundle itself as the whole body, with `?name=`, `?relink=1`, `?replace=<id>`) | Creates a **new** pipeline (201), or with `replace` swaps that pipeline's contents keeping its id (200; 422 if it does not exist). `relink` derives edges from declarations. Returns `{ pipeline, source, upgrades, warnings, notes, replaced? }` — **not** a bare pipeline; 422 on an invalid/unsupported file |
 | POST | `/api/pipelines/:id/relink` | — | Re-derives edges from declared inputs/outputs; `{ edgesCreated }` |
 
 ### Graph
@@ -770,13 +776,14 @@ violation, `422` invalid bundle, `500` unexpected).
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/api/graph?graph=<id>` | `{ codes, edges, tags, pipelineId }` — the whole pipeline in one call |
+| GET | `/api/graph?graph=<id>&view=summary` | `{ pipelineId, codes: [{id, name, tags, status}], edges: [[source, target]] }` — topology only, for agents |
 
 ### Codes
 
 | Method | Path | Body | Notes |
 |---|---|---|---|
 | POST | `/api/codes?graph=<id>` | `{ name, tags?, x?, y?, description?, owner? }` | 400 if no name; 404 if pipeline missing |
-| PATCH | `/api/codes/:id` | any of `name, description, owner, status, x, y` | 404 if missing |
+| PATCH | `/api/codes/:id` | any of `name, description, owner, status, x, y, provenance` | 404 if missing; 409 on an unknown provenance `source` |
 | DELETE | `/api/codes/:id` | — | Cascades tags/links/flow steps |
 | POST | `/api/codes/:id/duplicate` | `{ withInputs? }` | Returns the new code |
 | POST | `/api/codes/:id/tags` | `{ tag }` | 400 if empty; returns `{ tags }` |
@@ -790,8 +797,8 @@ violation, `422` invalid bundle, `500` unexpected).
 
 | Method | Path | Body | Notes |
 |---|---|---|---|
-| POST | `/api/codes/:id/asset-links` | `{ direction, path, detail?, tags?, documented? }` | Returns `{ code, assetId, edgesCreated }` |
-| PATCH | `/api/asset-links/:id` | any of `direction, path, detail, tags, documented` | Same return shape |
+| POST | `/api/codes/:id/asset-links` | `{ direction, path, detail?, tags?, documented?, provenance? }` | Returns `{ code, assetId, edgesCreated }` |
+| PATCH | `/api/asset-links/:id` | any of `direction, path, detail, tags, documented, provenance` | Same return shape |
 | DELETE | `/api/asset-links/:id` | — | Returns `{ code, assetId: null, edgesCreated: 0 }` |
 
 ### Assets (the catalogue)
@@ -799,11 +806,11 @@ violation, `422` invalid bundle, `500` unexpected).
 | Method | Path | Body | Notes |
 |---|---|---|---|
 | GET | `/api/assets?graph=<id>` | — | `AssetSummary[]` |
-| GET | `/api/schema?graph=<id>` | — | `SchemaTable[]`: every asset with its columns, producer, consumers and badges, sample rows left out. What the Schema tab draws, in one call instead of one `GET /api/assets/:id` per table |
+| GET | `/api/schema?graph=<id>` | — | `SchemaTable[]`: every asset with its columns, producer, consumers and badges. What the Schema tab draws, in one call instead of one `GET /api/assets/:id` per table |
 | POST | `/api/assets?graph=<id>` | `{ name, materialization?, description?, producerCodeId? }` | 400 if no name; 409 on duplicate name in pipeline |
-| GET | `/api/assets/:id` | — | Full `Asset` (columns, samples, producer, consumers) — `:id` is URI-encoded |
+| GET | `/api/assets/:id` | — | Full `Asset` (columns, producer, consumers) — `:id` is URI-encoded |
 | DELETE | `/api/assets/:id` | — | Removes from catalogue; links survive as unresolved |
-| PUT | `/api/assets/:id/schema` | `{ materialization, description, columns, sampleRows }` | Replaces schema wholesale |
+| PUT | `/api/assets/:id/schema` | `{ materialization, description, columns, name?, owner?, createdAt?, updatedAt?, updatedBy? }` | Replaces materialization, description and columns wholesale; optional fields left alone when omitted |
 
 ### Edges
 
@@ -849,8 +856,7 @@ Current envelope (`formatVersion: 6`):
       "id": "analytics_stg_orders", "name": "analytics.stg_orders",
       "materialization": "table", "description": "…", "producedBy": "stg_orders",
       "columns": [{ "name": "order_id", "dataType": "varchar", "keyKind": "pk",
-                     "nullable": false, "description": "…", "tests": ["not_null","unique"] }],
-      "sampleRows": [["123", "…"]]
+                     "nullable": false, "description": "…", "tests": ["not_null","unique"] }]
     }
   ]
 }
@@ -874,7 +880,13 @@ Key properties:
   Verified consequence: `export -> import -> export` returns a file identical to
   the original in every respect **except its ids**. Content is lossless; ids are
   handles the receiving Atlas assigns for itself.
-- **Import always creates a new pipeline.** There is no merge-into-existing mode.
+- **Import creates a new pipeline**, or with `--replace <id>` replaces one
+  pipeline's contents wholesale, keeping its id. There is no merge mode.
+- **Short-form files are filled in, and told so.** Omitted `position`s default
+  to array order, an omitted `assetRef` resolves by path, an omitted
+  `producedBy` resolves from the one code that outputs the asset, codes without
+  `x`/`y` are laid out (`layout.ts`), and `relink` derives edges. Each is a
+  `notes` line — distinct from `warnings`, which are repairs.
 - **Validated before anything is written**, and written inside one transaction:
   an import lands whole or not at all.
 - **Two classes of problem, kept apart.** A file that is *meaningless* is refused
@@ -887,7 +899,7 @@ Key properties:
   file newer than the running `BUNDLE_VERSION` is rejected with a message naming
   both versions. Anything from `MIN_BUNDLE_VERSION` (1) up is walked to the
   current format one rung at a time, and every step is reported.
-- **Self-contained but not bloated.** Schemas, sample rows and full logic-flow
+- **Self-contained but not bloated.** Schemas and full logic-flow
   text travel with the file, but a logic flow is *only* its steps — no captured
   source — which keeps a pipeline's export small enough to paste into a chat
   message, and safe to share when the repository it describes is not.
@@ -1192,10 +1204,6 @@ that generates `.atlas.json`, and the intended pre-flight for an agent.
   `tx()`** — duplication, schema saves, flow saves, bundle import — so a
   thrown error mid-write rolls back cleanly rather than leaving orphaned
   rows.
-- **Sample rows are import/seed-only.** There is no UI path that writes
-  `asset_samples`; `saveAssetSchema` always echoes back whatever sample rows
-  were already on the asset (`SchemaEditor` passes `asset.sampleRows`
-  through unchanged).
 - **Renaming a code has no UI**, even though `PATCH /api/codes/:id` accepts
   `name` — a known, documented gap (README, "Things deliberately left out").
 
@@ -1296,10 +1304,9 @@ Carried over from the README, confirmed against the code:
 - No authentication.
 - No importers beyond dbt. `dbt.ts` is the pattern for another: a pure
   translator into the bundle shape, detected in `readBundle`, so it reuses
-  `importBundle` and every check in it.
-- No merge-on-import — import always creates a new pipeline, including a
-  re-imported dbt project.
-- Sample rows aren't editable in the UI (seed/import only).
+  `importBundle` and every check in it. `scan.ts` is deliberately *not* an
+  importer: it drafts a short-form bundle whose every link is inferred.
+- No merge-on-import — import creates a new pipeline or replaces one wholesale.
 - No rename-code UI (the API supports it; nothing calls it).
 - Inferred links are additive-only — removing an asset link never retracts
   an edge it once caused; remove the edge itself on the canvas.

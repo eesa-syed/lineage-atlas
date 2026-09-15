@@ -44,6 +44,26 @@ export interface StewardshipPatch {
   updatedBy?: string;
 }
 
+/**
+ * The evidence behind a claim — where a code, or one declared input or output,
+ * was learned from. Tags record workflow state (`agent_drafted`); this records
+ * *why anyone believes it*, so "everything inferred from filenames" can be
+ * filtered apart from "everything confirmed from source".
+ *
+ *  - `doc`      read in a design doc, README or ticket
+ *  - `code`     confirmed by reading the source
+ *  - `inferred` guessed — from a filename, a naming convention, a scanner
+ *  - `human`    stated by a person who knows
+ */
+export type ProvenanceSource = 'doc' | 'code' | 'inferred' | 'human';
+export const PROVENANCE_SOURCES: ProvenanceSource[] = ['doc', 'code', 'inferred', 'human'];
+
+export interface Provenance {
+  source: ProvenanceSource;
+  /** Where exactly: `DESIGN.md §14.2`, `jobs/route.py:88`. Free text, may be empty. */
+  ref: string;
+}
+
 export interface AssetLink {
   id: string;
   direction: Direction;
@@ -54,6 +74,7 @@ export interface AssetLink {
   /** Set when this asset link points at a catalogued asset whose schema is documented. */
   assetId: string | null;
   position: number;
+  provenance: Provenance | null;
 }
 
 export interface Code extends Stewardship {
@@ -72,6 +93,15 @@ export interface Code extends Stewardship {
   hasFlow: boolean;
   /** Column names folded into search, so a search for a column finds its model. */
   searchTerms: string[];
+  provenance: Provenance | null;
+}
+
+/** `GET /api/graph?view=summary` — the topology and nothing else, for agents
+ * asking routine "what is downstream of X" questions. Edges are `[source, target]`. */
+export interface GraphSummary {
+  pipelineId: string;
+  codes: { id: string; name: string; tags: string[]; status: CodeStatus }[];
+  edges: [string, string][];
 }
 
 export interface GraphEdge {
@@ -144,6 +174,8 @@ export interface AssetLinkInput {
   tags: string[];
   /** True to resolve (or create) a catalogued asset named `path` and link it. */
   documented: boolean;
+  /** `null` clears it; omitted leaves it alone. */
+  provenance?: Provenance | null;
 }
 
 export interface AssetColumn {
@@ -257,10 +289,15 @@ export interface BundleCode extends Stewardship {
     path: string;
     detail: string;
     tags: string[];
-    /** Local id of an asset in this same bundle, if the link points at one. */
+    /** Local id of an asset in this same bundle, if the link points at one.
+     * Omitted (not `null`) means "resolve it by `path`" on the way in. */
     assetRef: string | null;
     position: number;
+    /** From v9. Omitted when unknown. */
+    provenance?: Provenance;
   }[];
+  /** From v9. Omitted when unknown. */
+  provenance?: Provenance;
 }
 
 export interface BundleAsset extends Stewardship {
@@ -268,7 +305,8 @@ export interface BundleAsset extends Stewardship {
   name: string;
   materialization: string;
   description: string;
-  /** Local id of the code that produces it. */
+  /** Local id of the code that produces it. Omitted means "the one code that
+   * outputs it", resolved on the way in; `null` means deliberately none. */
   producedBy: string | null;
   columns: { name: string; dataType: string; keyKind: 'pk' | 'fk' | null; nullable: boolean; description: string; tests: string[]; position: number }[];
 }
@@ -287,6 +325,10 @@ export interface BundleReadResult {
   /** Non-fatal repairs: the import still lands whole, but something was
    * dropped, skipped or defaulted, and the user is told which. */
   warnings: string[];
+  /** Things filled in that the file left out on purpose — references resolved
+   * by name, positions laid out, edges derived. Informational: nothing here is
+   * a repair, and a file written in the short form expects every one of them. */
+  notes: string[];
   /** Set when the input was a dbt manifest rather than a bundle: one line
    * saying what was read from it. See `dbt.ts`. */
   converted?: string;
@@ -301,8 +343,11 @@ export interface ImportResult {
   };
   upgrades: string[];
   warnings: string[];
+  notes: string[];
   /** Set when the file was a dbt manifest. */
   converted?: string;
+  /** True when the import replaced an existing pipeline's contents in place. */
+  replaced?: boolean;
 }
 
 /** `GET /api/version` — what a client (or an agent) reads to find out what it
@@ -317,6 +362,10 @@ export interface VersionInfo {
   /** Who edits made without an `X-Atlas-User` header are attributed to — every
    * edit from the web app, since it sends none. `ATLAS_USER`, else the OS user. */
   user: string;
+  /** The SQLite file this server reads and writes. The server binds to
+   * localhost by default and already prints this on startup; it is here so
+   * `lineage-atlas status` can say which database a running copy is using. */
+  db: string;
 }
 
 /* ------------------------------------------------------- legacy bundle v1 */

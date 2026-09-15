@@ -30,6 +30,7 @@ export function GraphCanvas() {
   const query = useAtlas((s) => s.query);
   const tagFilter = useAtlas((s) => s.tagFilter);
   const dateFilter = useAtlas((s) => s.dateFilter);
+  const provenanceFilter = useAtlas((s) => s.provenanceFilter);
   const mode = useAtlas((s) => s.mode);
   const connectFrom = useAtlas((s) => s.connectFrom);
 
@@ -87,7 +88,10 @@ export function GraphCanvas() {
   const wrapRef = useRef<HTMLDivElement>(null);
 
   const lineage = useMemo(() => lineageSet(selectedId, edges), [selectedId, edges]);
-  const filters = useMemo(() => ({ query, tags: tagFilter, dates: dateFilter }), [query, tagFilter, dateFilter]);
+  const filters = useMemo(
+    () => ({ query, tags: tagFilter, dates: dateFilter, provenance: provenanceFilter }),
+    [query, tagFilter, dateFilter, provenanceFilter],
+  );
 
   useEffect(() => {
     setRfNodes(

@@ -42,6 +42,11 @@ export function appDataDir(): string {
  * than one atlas, or point an install at a checkout's database.
  */
 export function defaultDbPath(): string {
-  if (process.env.ATLAS_DB) return resolve(process.env.ATLAS_DB);
+  if (process.env.ATLAS_DB) {
+    // Relative to where the command was typed, not to `server/`, when npm is
+    // running one of this workspace's scripts (see `callerDir` in cli.ts).
+    const base = process.env.npm_package_name === 'server' && process.env.INIT_CWD ? process.env.INIT_CWD : process.cwd();
+    return resolve(base, process.env.ATLAS_DB);
+  }
   return isCheckout ? resolve(here, '../../data/atlas.db') : join(appDataDir(), 'atlas.db');
 }
