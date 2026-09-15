@@ -13,7 +13,7 @@ locally. Then **let an AI agent document the pipeline, and review its work on th
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Node](https://img.shields.io/badge/node-%E2%89%A524-brightgreen)
-[![npm](https://img.shields.io/npm/v/lineage-atlas?color=blue&label=npm)](https://www.npmjs.com/package/lineage-atlas)
+[![Version](https://img.shields.io/npm/v/lineage-atlas?label=version&color=blue)](https://www.npmjs.com/package/lineage-atlas)
 ![File format](https://img.shields.io/badge/.atlas.json-format%209-lightgrey)
 [![Agent Skill](https://img.shields.io/badge/Claude%20Code-agent%20skill-D97757?logo=claude&logoColor=white)](.claude/skills/lineage-atlas/SKILL.md)
 ![Dependencies](https://img.shields.io/badge/native%20deps-none-success)
