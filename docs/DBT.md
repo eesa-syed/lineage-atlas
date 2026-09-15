@@ -52,8 +52,7 @@ lineage-atlas import jaffle-shop.atlas.json
 ```
 
 From a source checkout, the same commands are `npm run import -- …` and
-`npm run from-dbt -- …`. Use absolute paths, since npm runs the script from
-inside `server/`.
+`npm run from-dbt -- …`. Relative paths resolve from the folder you run them in.
 
 Every import reports what it read and what it skipped:
 
@@ -124,10 +123,15 @@ you can filter them out with one click.
 
 ## Re-importing after changes
 
-**Import always creates a new pipeline.** It never merges into or overwrites an
-existing one, so notes you've written in Atlas are never lost to a re-import.
-To pick up changes from your dbt project, import again, then delete the old
-pipeline once you've carried over anything you wrote in it.
+**Import creates a new pipeline by default.** It never merges, so notes you've
+written in Atlas are never lost to a re-import. To pick up changes from your dbt
+project, import again, then delete the old pipeline once you've carried over
+anything you wrote in it.
+
+If you haven't written anything in Atlas yet — you are still iterating on the
+project itself — `lineage-atlas import target/manifest.json --replace <pipelineId>`
+swaps that pipeline's contents for the new manifest's and keeps its id. It
+replaces everything, including any logic flows written in the app.
 
 A merge mode that keeps hand-written logic flows while updating the structure
 underneath would be a welcome contribution.

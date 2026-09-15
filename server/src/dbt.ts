@@ -31,6 +31,7 @@
  * in the real type of every column, including the ones nobody documented in
  * YAML — which is usually most of them.
  */
+import { layeredLayout } from './layout.js';
 import { normaliseTag } from './repo.js';
 import { APP_NAME, APP_VERSION, BUNDLE_FORMAT, BUNDLE_VERSION } from './version.js';
 import type { AtlasBundle, BundleAsset, BundleCode } from './types.js';
@@ -68,9 +69,6 @@ export interface DbtConversion {
   /** Things in the project that did not make it into the pipeline, and why. */
   notes: string[];
 }
-
-const COLUMN_WIDTH = 300;
-const ROW_HEIGHT = 240;
 
 /** Resource types that become codes. */
 const CODE_TYPES = new Set(['model', 'seed', 'snapshot']);
@@ -244,7 +242,7 @@ export function convertDbtManifest(manifest: Json, catalog?: Json | null): DbtCo
     });
   }
 
-  layout(codes, edges);
+  layeredLayout(codes, edges);
   const assets = [...new Set(assetOf.values())];
 
   /* ------------------------------------------------------------ notes */
@@ -415,51 +413,6 @@ function refFromKwargs(model: unknown, refIndex: Map<string, string>): string | 
   if (typeof model !== 'string') return undefined;
   const name = model.match(/ref\(\s*['"]([^'"]+)['"]\s*\)/)?.[1];
   return name ? refIndex.get(name) : undefined;
-}
-
-/**
- * Left-to-right by depth — each code one column right of its deepest parent —
- * then each column ordered by where its parents sit, which keeps most arrows
- * short and roughly horizontal. Not a crossing minimiser; a readable start that
- * a person can drag from.
- */
-function layout(codes: BundleCode[], edges: { source: string; target: string }[]): void {
-  const parents = new Map<string, string[]>();
-  for (const e of edges) parents.set(e.target, [...(parents.get(e.target) ?? []), e.source]);
-
-  const depth = new Map<string, number>();
-  const visiting = new Set<string>();
-  const depthOf = (id: string): number => {
-    if (depth.has(id)) return depth.get(id)!;
-    if (visiting.has(id)) return 0; // a cycle; readBundle will drop the edge that closes it
-    visiting.add(id);
-    const d = Math.max(-1, ...(parents.get(id) ?? []).map(depthOf)) + 1;
-    visiting.delete(id);
-    depth.set(id, d);
-    return d;
-  };
-
-  const columns = new Map<number, BundleCode[]>();
-  for (const code of codes) {
-    const d = depthOf(code.id);
-    columns.set(d, [...(columns.get(d) ?? []), code]);
-  }
-
-  const row = new Map<string, number>();
-  for (const d of [...columns.keys()].sort((a, b) => a - b)) {
-    const column = columns.get(d)!;
-    const weight = (code: BundleCode) => {
-      const ps = (parents.get(code.id) ?? []).filter((p) => row.has(p));
-      return ps.length ? ps.reduce((sum, p) => sum + row.get(p)!, 0) / ps.length : Number.POSITIVE_INFINITY;
-    };
-    column
-      .sort((a, b) => weight(a) - weight(b) || (a.tags[0] ?? '').localeCompare(b.tags[0] ?? '') || a.name.localeCompare(b.name))
-      .forEach((code, i) => {
-        row.set(code.id, i);
-        code.x = 40 + d * COLUMN_WIDTH;
-        code.y = 40 + i * ROW_HEIGHT;
-      });
-  }
 }
 
 function countBy<T>(items: T[], key: (item: T) => string): Map<string, number> {

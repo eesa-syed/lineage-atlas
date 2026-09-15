@@ -17,7 +17,7 @@ check). It declares **asset links**: what it reads (`input`) and writes
 (`output`). When one code outputs `analytics.orders` and another lists it as an
 input, the **edge** between them is drawn automatically — you almost never draw
 arrows, you declare I/O and the topology follows. An **asset** is a documented
-table: columns, keys, tests, samples, and both directions of its lineage. A
+table: columns, keys, tests, and both directions of its lineage. A
 **pipeline** is one isolated graph. **Tags** are the only classification; the
 first tag is the main one. The graph is always **acyclic**.
 
@@ -36,9 +36,12 @@ see **Operating it**.
 
 | Need | Do |
 |---|---|
-| Start it | `npm run build && npm start` or `npm run dev` (checkout); `lineage-atlas` if the command is installed. Not on npm yet, so `npx lineage-atlas` fails |
+| Start it | `npx lineage-atlas` (or `lineage-atlas` if installed with `npm install -g lineage-atlas`); from a checkout, `npm run build && npm start` or `npm run dev`. Every other command works the same way: `npx lineage-atlas import …` |
 | Start it without a browser | `lineage-atlas serve`, or `ATLAS_NO_OPEN=1` |
-| Is it alive | `GET /api/health` → `{ ok, version }` |
+| Is it running, and on which port and database | `lineage-atlas status` (`npm run status` in a checkout) — starts nothing, opens no database |
+| Is it alive | `GET /api/health` → `{ ok, version }`; `GET /api/version` also names the `db` file |
+| A database without the demo pipeline | `--no-seed`, or `ATLAS_NO_SEED=1`, on first start |
+| Use this skill outside the Atlas checkout | `lineage-atlas install-skill` (`--project` for `./.claude/skills`); `lineage-atlas version` says if an installed copy is stale |
 | Point it at a different database | `lineage-atlas --db <file>`, or `ATLAS_DB=<file>` |
 | Pin the port | `lineage-atlas --port <n>`, or `ATLAS_PORT=<n>` |
 
@@ -62,17 +65,28 @@ immediately.
 
 ## Reading
 
-**One call gets the whole topology.** Do this before anything else:
+**Start with the shape.** One small call answers "what is up- or downstream of
+X" for any size of pipeline:
+
+```bash
+curl -s "localhost:5174/api/graph?graph=<pipelineId>&view=summary"
+lineage-atlas summary <pipelineId>      # the same, as a plain adjacency list
+```
+
+`view=summary` returns `{pipelineId, codes: [{id, name, tags, status}], edges:
+[[source, target]]}` — nothing else. **Fetch the full graph only when the
+question needs its content:**
 
 ```bash
 curl -s "localhost:5174/api/graph?graph=<pipelineId>"
 ```
 
 Returns every code with `tags`, `inputs`, `outputs`, `owner`, `status`,
-`hasFlow` and `searchTerms`, plus every `edge`. `searchTerms` already contains
-the column names of the asset each code produces and the text of its logic-flow
-steps — so a column name can be matched against it directly, with no extra
-calls.
+`provenance`, `hasFlow` and `searchTerms`, plus every `edge`. `searchTerms`
+already contains the column names of the asset each code produces and the text
+of its logic-flow steps — so a column name can be matched against it directly,
+with no extra calls. For a large pipeline it is most of your token budget; the
+summary is not.
 
 Then, as needed:
 
@@ -85,9 +99,9 @@ Then, as needed:
 | Every table with its columns, one call | `GET /api/schema?graph=<id>` |
 | Assets a code could link to, id + name only | `GET /api/codes/:id/linkable-assets` |
 
-**Trace a column back:** find the code whose `searchTerms` hold the column, then
-walk `edges` backwards (`target → source`) to the sources. Acyclic, so it
-terminates. `GET /api/codes/:id/flow` at each hop explains what happened to the
+**Trace a column back:** find the code whose `searchTerms` hold the column (full
+graph), then walk `edges` backwards (`target → source`) to the sources — the
+summary is enough for the walk. Acyclic, so it terminates. `GET /api/codes/:id/flow` at each hop explains what happened to the
 value there.
 
 **Impact analysis:** walk `edges` forwards from the code, then
@@ -123,7 +137,8 @@ the response's `id` is the `?graph=` for everything above. Everything belongs to
 exactly one pipeline and nothing crosses between them.
 
 **Editing what is already there** — `PATCH /api/codes/:id` with any of `name`,
-`description`, `owner`, `status` (`active` | `inactive`), `x`, `y`. Only the
+`description`, `owner`, `status` (`active` | `inactive`), `x`, `y`,
+`provenance`. Only the
 keys you send change, so unlike the two PUTs below this is safe to use for one
 field at a time. It is the call for documenting existing codes: most of the work
 in a real pipeline is filling in `description` and `owner`, not creating rows.
@@ -132,7 +147,7 @@ in a real pipeline is filling in `description` and `owner`, not creating rows.
 Then the documentation:
 
 - `PUT /api/codes/:id/flow` `{steps:[{op,title,body}]}`
-- `PUT /api/assets/:id/schema` `{materialization, description, columns, sampleRows}`
+- `PUT /api/assets/:id/schema` `{materialization, description, columns}` (plus optional `name`, `owner`)
 
 **Both replace their target wholesale.** GET the current value, merge, PUT the
 result. A partial PUT is data loss and there is no undo.
@@ -154,6 +169,14 @@ comes back as `agent_drafted`, which is the spelling to use when removing or
 promoting it. The **first** tag decides the code's colour and badge on the
 canvas, so `…/primary` is a visual change a human will notice; promoting your
 own bookkeeping tag over a meaningful one is rude.
+
+**Record your evidence.** Codes and asset links take an optional
+`provenance: {source, ref}` — `source` is `doc`, `code`, `inferred` or `human`,
+`ref` says where (`"DESIGN.md §14.2"`, `"jobs/route.py:88"`). Send it on
+`POST /api/codes/:id/asset-links`, `PATCH /api/asset-links/:id` and
+`PATCH /api/codes/:id`; `null` clears it. The app shows it and has a filter chip
+per source, so a reviewer can pull up everything `inferred` in one click. Tags
+stay for workflow state (`agent_drafted`); provenance is why a claim is believed.
 
 When documenting a whole pipeline: create the codes, declare every input and
 output, **then stop and check the inferred edges**. If the shape is wrong the
@@ -178,8 +201,8 @@ lineage-atlas import   target/manifest.json --catalog target/catalog.json
 lineage-atlas from-dbt target/manifest.json out.atlas.json --catalog target/catalog.json  # write a file instead
 ```
 
-From a checkout use `npm run import -- …` with **absolute paths** (npm runs it
-from `server/`). Over HTTP, `POST /api/pipelines/import` accepts the manifest as
+From a checkout use `npm run import -- …`; relative paths resolve from where you
+ran it. Over HTTP, `POST /api/pipelines/import` accepts the manifest as
 the body, or `{"bundle": <manifest>, "catalog": <catalog>}`. `dbt parse` gives a
 manifest without warehouse access; the graph is complete but tables carry only
 YAML-documented columns.
@@ -194,58 +217,76 @@ Mapping details: `docs/DBT.md`.
 Passing `catalog.json` or `run_results.json` as the main file is refused with a
 message naming the right one.
 
+### Not dbt? Scan first, then correct
+
+For Lambdas, Glue jobs, Airflow tasks or plain Python/SQL, get a draft
+inventory instead of reading every file to find the I/O:
+
+```bash
+lineage-atlas scan ./jobs draft.atlas.json --name "Mail routing"
+lineage-atlas validate draft.atlas.json --relink
+lineage-atlas import   draft.atlas.json --relink
+```
+
+One code per source file with recognisable I/O; candidate paths from S3/GCS
+URIs, bucket/key constants, SQL `FROM`/`JOIN`/`INSERT INTO`, DynamoDB table
+names, pandas/Spark readers and writers. **Every link is a guess** — tagged
+`unverified`, `provenance: {source: "inferred", ref: "file.py:12"}`. Your job is
+to confirm or delete each one against the code and set `provenance.source` to
+`code` as you do. Then write descriptions and flows. The scan never marks
+anything verified, and neither should you without reading the line.
+
 ### The `.atlas.json` format
 
-Current `formatVersion` is **8** — but confirm with `GET /api/version`
+Current `formatVersion` is **9** — but confirm with `GET /api/version`
 (`bundleVersion`) and write that number. A file newer than the running build is
 refused outright.
+
+**Write the short form.** Everything Atlas can derive, leave out: `x`/`y` (laid
+out left→right by depth), `position` (array order), `tags`/`detail` (empty),
+`assetRef` (resolved when exactly one asset's `name` equals the link's `path`),
+`producedBy` (the one code that outputs the asset), and edges (import with
+`--relink`). This file is complete:
 
 ```json
 {
   "format": "lineage-atlas.pipeline",
-  "formatVersion": 8,
+  "formatVersion": 9,
   "generator": { "name": "claude-agent", "version": "0.1.0" },
   "exportedAt": "2026-09-13T00:00:00.000Z",
-  "counts": { "codes": 2, "edges": 1, "assets": 1 },
   "pipeline": { "name": "Orders mini", "description": "Two-step example" },
   "codes": [
     {
       "id": "c_stg_orders",
       "name": "stg_orders",
-      "x": 0, "y": 0,
       "description": "Types and deduplicates raw Shopify orders.",
       "owner": "Analytics Eng",
       "status": "active",
-      "createdAt": "2026-09-13T00:00:00.000Z",
-      "updatedAt": "2026-09-13T00:00:00.000Z",
-      "updatedBy": "claude-agent",
       "tags": ["sql", "staging", "agent_drafted"],
+      "provenance": { "source": "code", "ref": "models/staging/stg_orders.sql" },
       "steps": [
-        { "position": 0, "op": "read",   "title": "Read the raw source",     "body": "Landed Shopify payload, unfiltered." },
-        { "position": 1, "op": "dedupe", "title": "Keep the latest version", "body": "Shopify re-sends an order on every update, so keep the newest row per id." }
+        { "op": "read",   "title": "Read the raw source",     "body": "Landed Shopify payload, unfiltered." },
+        { "op": "dedupe", "title": "Keep the latest version", "body": "Shopify re-sends an order on every update, so keep the newest row per id." }
       ],
       "assetLinks": [
-        { "direction": "input",  "path": "raw.shopify_orders",   "detail": "source table",      "tags": [], "assetRef": null,           "position": 0 },
-        { "direction": "output", "path": "analytics.stg_orders", "detail": "one row per order", "tags": [], "assetRef": "a_stg_orders", "position": 0 }
+        { "direction": "input",  "path": "raw.shopify_orders", "detail": "source table" },
+        { "direction": "output", "path": "analytics.stg_orders" }
       ]
     },
     {
       "id": "c_fct_orders",
       "name": "fct_orders",
-      "x": 320, "y": 0,
       "description": "Certified order fact.",
       "owner": "Analytics Eng",
       "status": "active",
       "tags": ["sql", "mart", "agent_drafted"],
-      "steps": [],
       "assetLinks": [
-        { "direction": "input", "path": "analytics.stg_orders", "detail": "", "tags": [], "assetRef": "a_stg_orders", "position": 0 }
+        { "direction": "input", "path": "analytics.stg_orders",
+          "provenance": { "source": "inferred", "ref": "model name only" } }
       ]
     }
   ],
-  "edges": [
-    { "source": "c_stg_orders", "target": "c_fct_orders" }
-  ],
+  "edges": [],
   "assets": [
     {
       "id": "a_stg_orders",
@@ -253,17 +294,18 @@ refused outright.
       "materialization": "view",
       "description": "Deduplicated orders.",
       "owner": "Analytics Eng",
-      "producedBy": "c_stg_orders",
       "columns": [
-        { "name": "order_id",   "dataType": "varchar",   "keyKind": "pk", "nullable": false, "description": "Shopify order id", "tests": ["not_null", "unique"], "position": 0 },
-        { "name": "ordered_at", "dataType": "timestamp", "keyKind": null, "nullable": false, "description": "UTC",              "tests": [],                     "position": 1 }
+        { "name": "order_id",   "dataType": "varchar",   "keyKind": "pk", "description": "Shopify order id", "tests": ["not_null", "unique"] },
+        { "name": "ordered_at", "dataType": "timestamp", "description": "UTC" }
       ]
     }
   ]
 }
 ```
 
-That file validates cleanly as written. Field by field:
+`lineage-atlas import file --relink` lands it with the `stg_orders → fct_orders`
+edge; `validate --relink` prints `filled in` lines saying exactly what was
+derived. Field by field:
 
 **Envelope** — all required.
 
@@ -283,25 +325,27 @@ That file validates cleanly as written. Field by field:
 |---|---|---|
 | `id` | string | **Required**, unique in the file. File-local handle, remapped on import — any stable string works. |
 | `name` | string | **Required.** |
-| `x`, `y` | number | Canvas position, default `0`. Space columns ~320 apart left→right by depth, or every code piles up at the origin. |
+| `x`, `y` | number | Canvas position. **Omit both** and the code is laid out left→right by depth on import (below any codes that do have coordinates). |
 | `description`, `owner` | string | Default `""`. |
 | `status` | `"active"` \| `"inactive"` | Default `"inactive"`. **Any other value refuses the file.** |
 | `createdAt`, `updatedAt` | ISO-8601 | Optional; omitted means "the moment of import". |
 | `updatedBy` | string | Optional attribution. |
 | `tags` | string[] | Ordered. `tags[0]` is the main tag (colour + badge) — make it meaningful (`sql`, `mart`), not `agent_drafted`. |
-| `steps` | `{position, op, title, body}[]` | The prose logic flow. Prose only — **never paste source code**. |
+| `steps` | `{position, op, title, body}[]` | The prose logic flow. Prose only — **never paste source code**. `position` defaults to array order. |
 | `assetLinks` | array | What the code reads and writes (below). |
+| `provenance` | `{source, ref}` | Optional. `source`: `doc` \| `code` \| `inferred` \| `human`; `ref`: where. An unknown `source` is dropped with a warning. |
 
 **`codes[].assetLinks[]`**
 
 | Field | Type | Rule |
 |---|---|---|
 | `direction` | `"input"` \| `"output"` | **Required.** Any other value refuses the file. |
-| `path` | string | Table name, S3 URI, file path. Use the *same spelling* on both ends of a flow. |
-| `detail` | string | Free text. Say `"inferred from filename"` here when you are not sure. |
+| `path` | string | Table name, S3 URI, file path. Use the *same spelling* on both ends of a flow — including placeholders: `<id>` on one side and `{run_id}` on the other are different paths (validate warns). |
+| `detail` | string | Optional free text. |
 | `tags` | string[] | Optional, e.g. `["file"]`, `["seed"]`. |
-| `assetRef` | string \| null | An `assets[].id` in this file, or `null` for an undocumented path. |
-| `position` | number | Order within its direction. |
+| `assetRef` | string \| null | **Omit** to resolve by `path` = asset `name`. An `assets[].id` to be explicit, or `null` for a deliberately undocumented path. |
+| `position` | number | Optional; defaults to order within its direction. |
+| `provenance` | `{source, ref}` | Optional, as on codes. Use `inferred` for anything you did not confirm in source. |
 
 **`assets[]`**
 
@@ -311,20 +355,26 @@ That file validates cleanly as written. Field by field:
 | `name` | string | **Required.** Must match the `path` codes use for it. |
 | `materialization` | string | Free text: `table`, `view`, `incremental`… Default `"table"`. |
 | `description`, `owner` | string | Plus optional `createdAt`/`updatedAt`/`updatedBy`, as on codes. |
-| `producedBy` | string \| null | The `codes[].id` that outputs it. |
-| `columns[]` | array | `{name, dataType, keyKind, nullable, description, tests, position}`. `keyKind` is `"pk"`, `"fk"` or `null`; `tests` is always a string array. |
+| `producedBy` | string \| null | **Omit** to use the one code that outputs it. `null` = deliberately no producer, which also means relink draws **no edges** from it. |
+| `columns[]` | array | `{name, dataType, keyKind, nullable, description, tests, position}`. Only `name` is required; `position` defaults to order, `tests` to `[]`. |
+
+**Shared-state assets** — a run registry, a config table, a log sink written by
+twenty codes and read by ten — should be documented (so they are searchable)
+but must not wire every writer to every reader. Give them `"producedBy": null`.
+An omitted `producedBy` on an asset with several writers is also left without a
+producer, with a warning telling you to decide.
 
 No `sampleRows` (dropped in format 8), no row data, no credentials, no
 connection strings — the file is meant to be safe to hand around.
 
 **`edges[]`** — `{source, target}`, both `codes[].id` values in this file.
 
-> **Import does not infer edges.** Unlike the API's `asset-links` call, an
-> imported file gets exactly the `edges` it lists — a file with `"edges": []`
-> lands as disconnected boxes. Either write every edge yourself (derive them:
-> for each output path, an edge to every code with that path as input), or
-> import with empty edges and then run `POST /api/pipelines/:id/relink`, which
-> derives them from the declarations and returns `edgesCreated`.
+> **Import derives edges only when asked.** Without `--relink` a file gets
+> exactly the `edges` it lists, so `"edges": []` lands as disconnected boxes.
+> **Use `import --relink`** (HTTP: `?relink=1`, or `"relink": true` in the
+> envelope): every asset's producer gets an edge to every code reading it,
+> listed edges still win, and any derived edge that would close a cycle is
+> reported by name. Do not hand-write edges an asset already implies.
 
 **Refused (nothing written, HTTP `422` / CLI exit `1`):** wrong `format`; bad or
 too-new `formatVersion`; a missing array; empty `pipeline.name`; a code or asset
@@ -333,7 +383,12 @@ that is not a code in the file.
 
 **Imported with warnings (read them):** `assetRef` or `producedBy` pointing at
 nothing (the link/asset loses it); self-edges and duplicate edges (skipped);
-**an edge that would close a cycle (skipped)**; `counts` not matching.
+**an edge that would close a cycle (skipped)**; `counts` not matching; an asset
+with several writers and no `producedBy`; paths that differ only in placeholder
+spelling; an unknown provenance `source`. `counts` itself is optional.
+
+**Filled in (`filled in` lines, not problems):** assetRefs and producers
+resolved, positions laid out, edges derived.
 
 ### Moving files
 
@@ -342,10 +397,17 @@ lineage-atlas export   <pipelineId> out.atlas.json
 lineage-atlas validate out.atlas.json   # writes nothing; exits 1 if it would be refused
 lineage-atlas import   out.atlas.json "Name"
 
-# from a checkout, the same three commands
+# a file you authored (short form, no edges): derive them
+lineage-atlas validate draft.atlas.json --relink
+lineage-atlas import   draft.atlas.json --relink
+
+# iterating on a draft: replace the same pipeline instead of piling up copies
+lineage-atlas import   draft.atlas.json --relink --replace <pipelineId>
+
+# from a checkout, the same commands
 npm run export   -- <pipelineId> out.atlas.json
-npm run validate -- out.atlas.json
-npm run import   -- out.atlas.json "Name"
+npm run validate -- draft.atlas.json --relink
+npm run import   -- draft.atlas.json --relink
 ```
 
 **Always validate before importing, and read the output.** `upgraded` lines say
@@ -361,20 +423,25 @@ machine's shell:
 |---|---|
 | `export <id> [file]` | `GET /api/pipelines/:id/export` — the bundle as the body, with the filename in `Content-Disposition` |
 | `validate <file>` | `POST /api/pipelines/validate` — the bundle as the request body; writes nothing |
-| `import <file> ["Name"]` | `POST /api/pipelines/import` `{bundle, name}` |
+| `import <file> ["Name"] [--relink] [--replace <id>]` | `POST /api/pipelines/import` `{bundle, name, relink, replace}` |
 
 `validate` answers `200` with `{ok, pipeline, counts, source, upgrades,
 warnings}` or `422` with `{error}`; the `422` text is the reason, and it is
 usually specific enough to fix the file.
 
 Ids inside a file are local to it and remapped on import, so importing is always
-safe and always creates a *new* pipeline. It never merges or overwrites.
+safe and creates a *new* pipeline — unless you pass `--replace <pipelineId>`,
+which swaps that pipeline's entire contents for the file's while keeping its id
+(so `?graph=` links survive). Replace refuses a pipeline that does not exist. It
+is not a merge: anything in the pipeline but not in the file is gone, so only
+replace a pipeline you created from that file.
 
 ## Rules
 
 - **Never invent structure.** A declared input claims this code reads that table.
-  If you inferred it from a filename rather than the logic, say so in `detail` or
-  tag the code `unverified`. A confident wrong entry is worse than a missing one,
+  If you inferred it from a filename rather than the logic, record
+  `provenance: {source: "inferred", ref: …}` on it (and tag the code
+  `unverified` if the whole code is a guess). A confident wrong entry is worse than a missing one,
   because a human will believe it.
 - **Write intent, not a restatement.** A logic flow should say *why* this join,
   *why* this filter. Prose that just narrates the SQL is noise.

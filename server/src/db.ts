@@ -179,6 +179,13 @@ CREATE TABLE IF NOT EXISTS flow_steps (
 /** The pipeline that existing data belongs to, and the one seeded on a fresh install. */
 export const DEFAULT_GRAPH_ID = 'warehouse';
 
+/**
+ * `ATLAS_NO_SEED=1` (or `--no-seed`): a fresh database gets no demo pipeline —
+ * neither the "Analytics warehouse" row nor its contents. For an agent or a CI
+ * job listing pipelines, the demo is noise. A database that already has it keeps it.
+ */
+export const NO_SEED = ['1', 'true', 'yes'].includes((process.env.ATLAS_NO_SEED ?? '').trim().toLowerCase());
+
 function tableExists(table: string): boolean {
   return !!get('SELECT name FROM sqlite_master WHERE type = ? AND name = ?', 'table', table);
 }
@@ -192,7 +199,7 @@ function columnNames(table: string): Set<string> {
  * straight through.
  */
 function migrate(): void {
-  if (!get('SELECT id FROM graphs WHERE id = ?', DEFAULT_GRAPH_ID)) {
+  if (!NO_SEED && !get('SELECT id FROM graphs WHERE id = ?', DEFAULT_GRAPH_ID)) {
     run(
       'INSERT INTO graphs (id, name, description) VALUES (?, ?, ?)',
       DEFAULT_GRAPH_ID,
@@ -233,6 +240,25 @@ function migrate(): void {
   // Drops the sample rows an asset used to carry. Guarded on the table still
   // being there.
   if (tableExists('asset_samples')) dropSampleRows();
+
+  // Adds the evidence behind a code or a declared input/output (file format
+  // 9). Guarded on the column not existing yet.
+  if (!columnNames('codes').has('provenance_source')) addProvenance();
+}
+
+/**
+ * Provenance: where a claim was learned from (`doc`, `code`, `inferred`,
+ * `human`) and exactly where (`DESIGN.md §14.2`). Plain `ALTER TABLE … ADD
+ * COLUMN` is enough here — unlike the timestamps, the default is a constant
+ * (`''`, meaning unknown), so nothing needs rebuilding.
+ */
+function addProvenance(): void {
+  tx(() => {
+    for (const table of ['codes', 'asset_links']) {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN provenance_source TEXT NOT NULL DEFAULT ''`);
+      db.exec(`ALTER TABLE ${table} ADD COLUMN provenance_ref TEXT NOT NULL DEFAULT ''`);
+    }
+  });
 }
 
 /**

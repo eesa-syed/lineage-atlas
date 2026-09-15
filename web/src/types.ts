@@ -19,6 +19,23 @@ export interface Stewardship {
   updatedBy: string;
 }
 
+/** Mirrors the server's `Provenance`: the evidence behind a claim. Tags record
+ * workflow state; this records why anyone believes the claim at all. */
+export type ProvenanceSource = 'doc' | 'code' | 'inferred' | 'human';
+export const PROVENANCE_SOURCES: ProvenanceSource[] = ['code', 'doc', 'human', 'inferred'];
+export const PROVENANCE_LABEL: Record<ProvenanceSource, string> = {
+  code: 'confirmed in code',
+  doc: 'from a doc',
+  human: 'stated by a person',
+  inferred: 'inferred',
+};
+
+export interface Provenance {
+  source: ProvenanceSource;
+  /** Where exactly — `DESIGN.md §14.2`, `jobs/route.py:88`. May be empty. */
+  ref: string;
+}
+
 export interface AssetLink {
   id: string;
   direction: 'input' | 'output';
@@ -28,6 +45,7 @@ export interface AssetLink {
   tags: string[];
   assetId: string | null;
   position: number;
+  provenance: Provenance | null;
 }
 
 export interface Code extends Stewardship {
@@ -44,6 +62,7 @@ export interface Code extends Stewardship {
   assetId: string | null;
   hasFlow: boolean;
   searchTerms: string[];
+  provenance: Provenance | null;
 }
 
 /** Everything `PATCH /api/codes/:id` accepts. Every field is optional and an
@@ -51,7 +70,7 @@ export interface Code extends Stewardship {
  * the user actually changed, so an ordinary edit still auto-stamps the dates
  * while a deliberate edit of them wins. */
 export type CodePatch = Partial<
-  Pick<Code, 'name' | 'description' | 'owner' | 'status' | 'x' | 'y' | 'createdAt' | 'updatedAt' | 'updatedBy'>
+  Pick<Code, 'name' | 'description' | 'owner' | 'status' | 'x' | 'y' | 'createdAt' | 'updatedAt' | 'updatedBy' | 'provenance'>
 >;
 
 export interface GraphEdge {
@@ -91,6 +110,9 @@ export interface ImportResult {
   upgrades: string[];
   /** Non-fatal repairs: skipped cycles, dangling references, and the like. */
   warnings: string[];
+  /** What was filled in because the file left it out: references resolved by
+   * name, positions laid out, edges derived. */
+  notes?: string[];
   /** Set when the file was a dbt manifest: what was read from it. */
   converted?: string;
 }
@@ -106,6 +128,8 @@ export interface VersionInfo {
   /** Who edits made without an `X-Atlas-User` header are attributed to — every
    * edit from the web app, since it sends none. `ATLAS_USER`, else the OS user. */
   user: string;
+  /** The database file this server uses. Absent from older servers. */
+  db?: string;
 }
 
 export interface FlowInput {
@@ -120,6 +144,8 @@ export interface AssetLinkInput {
   tags: string[];
   /** True to resolve (or create) a catalogued asset named `path` and link it. */
   documented: boolean;
+  /** `null` clears it; omitted leaves it alone. */
+  provenance?: Provenance | null;
 }
 
 export interface AssetSummary extends Stewardship {

@@ -1,6 +1,7 @@
 import { nanoid } from 'nanoid';
 import { all, get, isoTime, newEntityId, NOW, run, touch, touchAsset, tx, uniqueId } from './db.js';
-import type { SchemaTable, Asset, AssetColumn, AssetLink, AssetLinkInput, AssetSchemaInput, AssetSummary, Code, CodeFlow, CodeRef, CodeStatus, FlowInput, Graph, GraphEdge, Pipeline, Stewardship, StewardshipPatch } from './types.js';
+import { provenanceOf, readProvenance } from './provenance.js';
+import type { SchemaTable, Asset, AssetColumn, AssetLink, AssetLinkInput, AssetSchemaInput, AssetSummary, Code, CodeFlow, CodeRef, CodeStatus, FlowInput, Graph, GraphEdge, GraphSummary, Pipeline, Provenance, Stewardship, StewardshipPatch } from './types.js';
 
 const newId = () => nanoid(12);
 
@@ -8,6 +9,7 @@ interface CodeRow {
   id: string; name: string; x: number; y: number; description: string;
   owner: string; status: 'active' | 'inactive';
   updated_by: string; created_at: string; updated_at: string;
+  provenance_source: string; provenance_ref: string;
 }
 
 /** The four stewardship fields, read off any row that carries them. */
@@ -22,6 +24,7 @@ function stewardship(row: { owner: string; updated_by: string; created_at: strin
 interface AssetLinkRow {
   id: string; code_id: string; direction: 'input' | 'output';
   path: string; detail: string; asset_id: string | null; position: number;
+  provenance_source: string; provenance_ref: string;
 }
 
 /* ------------------------------------------------------------------ reads */
@@ -72,6 +75,7 @@ export function getGraph(graphId: string): Graph {
   const toAssetLink = (a: AssetLinkRow): AssetLink => ({
     id: a.id, direction: a.direction, path: a.path,
     detail: a.detail, tags: linkTagsBy.get(a.id) ?? [], assetId: a.asset_id, position: a.position,
+    provenance: provenanceOf(a),
   });
 
   const codes: Code[] = rows.map((r) => {
@@ -87,6 +91,7 @@ export function getGraph(graphId: string): Graph {
       assetId: outputs.find((a) => a.assetId)?.assetId ?? null,
       hasFlow: withFlow.has(r.id),
       searchTerms: [...(colsBy.get(r.id) ?? []), ...(flowTextBy.get(r.id) ?? [])],
+      provenance: provenanceOf(r),
     };
   });
 
@@ -96,6 +101,35 @@ export function getGraph(graphId: string): Graph {
       'SELECT e.id, e.source, e.target FROM edges e JOIN codes c ON c.id = e.source WHERE c.graph_id = ?',
       graphId,
     ),
+  };
+}
+
+/**
+ * The topology and nothing else: every code's id, name, tags and status, and
+ * every edge as a `[source, target]` pair. `getGraph` is a whole pipeline's
+ * documentation — descriptions, inputs, outputs, search terms — which is the
+ * wrong price for "what is downstream of X". Three queries, no per-code work.
+ */
+export function getGraphSummary(graphId: string): GraphSummary {
+  const tagsBy = group(
+    all<{ code_id: string; tag: string }>(
+      `SELECT t.code_id, t.tag FROM code_tags t JOIN codes c ON c.id = t.code_id
+       WHERE c.graph_id = ? ORDER BY t.position, t.tag`,
+      graphId,
+    ),
+    (t) => t.code_id,
+    (t) => t.tag,
+  );
+  return {
+    pipelineId: graphId,
+    codes: all<{ id: string; name: string; status: CodeStatus }>(
+      'SELECT id, name, status FROM codes WHERE graph_id = ? ORDER BY x, y',
+      graphId,
+    ).map((c) => ({ id: c.id, name: c.name, tags: tagsBy.get(c.id) ?? [], status: c.status })),
+    edges: all<{ source: string; target: string }>(
+      'SELECT e.source, e.target FROM edges e JOIN codes c ON c.id = e.source WHERE c.graph_id = ?',
+      graphId,
+    ).map((e) => [e.source, e.target]),
   };
 }
 
@@ -199,6 +233,21 @@ export interface CodePatch extends StewardshipPatch {
   status?: CodeStatus;
   x?: number;
   y?: number;
+  /** `null` clears it. */
+  provenance?: Provenance | null;
+}
+
+/**
+ * Validates provenance from a request and appends its two columns. Unlike a
+ * file, where a bad value is dropped with a warning, a write names one thing
+ * and the caller is right there to fix it — so an unknown source is refused.
+ */
+function provenanceWrite(value: unknown, fields: string[], values: (string | number | null)[]): void {
+  const { provenance, invalid } = readProvenance(value);
+  if (invalid) throw new ConflictError(`${invalid[0].toUpperCase()}${invalid.slice(1)}.`);
+  if (provenance === undefined) return;
+  fields.push('provenance_source = ?', 'provenance_ref = ?');
+  values.push(provenance?.source ?? '', provenance?.ref ?? '');
 }
 
 /**
@@ -248,6 +297,7 @@ export function updateCode(codeId: string, patch: CodePatch, actor: string): Cod
   }
   if (patch.x !== undefined) set('x', Number(patch.x));
   if (patch.y !== undefined) set('y', Number(patch.y));
+  provenanceWrite(patch.provenance, fields, values);
 
   // Nothing asked for means nothing written — an empty PATCH must not count as
   // an edit and move the record's dates.
@@ -369,8 +419,8 @@ export function duplicateCode(codeId: string, withInputs: boolean, actor: string
     // The copy inherits the original's owner but not its dates: it is a new
     // record, created now, by whoever pressed duplicate.
     run(
-      `INSERT INTO codes (id, graph_id, name, x, y, description, owner, status, updated_by)
-       SELECT ?, graph_id, ?, x + 40, y + 134, description, owner, status, ?
+      `INSERT INTO codes (id, graph_id, name, x, y, description, owner, status, updated_by, provenance_source, provenance_ref)
+       SELECT ?, graph_id, ?, x + 40, y + 134, description, owner, status, ?, provenance_source, provenance_ref
        FROM codes WHERE id = ?`,
       copyId, copyName, actor, codeId,
     );
@@ -385,9 +435,9 @@ export function duplicateCode(codeId: string, withInputs: boolean, actor: string
     // Asset links are copied, but the copy does not claim ownership of the
     // original's asset — two codes producing one table would be a lie.
     run(
-      `INSERT INTO asset_links (id, code_id, direction, path, detail, asset_id, position)
+      `INSERT INTO asset_links (id, code_id, direction, path, detail, asset_id, position, provenance_source, provenance_ref)
        SELECT lower(hex(randomblob(6))), ?, direction, path, detail,
-              CASE WHEN direction = 'input' THEN asset_id ELSE NULL END, position
+              CASE WHEN direction = 'input' THEN asset_id ELSE NULL END, position, provenance_source, provenance_ref
        FROM asset_links WHERE code_id = ?`,
       copyId, codeId,
     );
@@ -606,14 +656,18 @@ function setAssetLinkTags(assetLinkId: string, tags: string[]): void {
 export function addAssetLink(codeId: string, input: AssetLinkInput, actor: string): AssetLinkResult {
   if (!input.path?.trim()) throw new ConflictError('An input or output needs a path.');
   const path = input.path.trim();
+  const provenance = readProvenance(input.provenance);
+  if (provenance.invalid) throw new ConflictError(`${provenance.invalid[0].toUpperCase()}${provenance.invalid.slice(1)}.`);
 
   const assetId = input.documented ? resolveAsset(codeId, path, input.direction, actor) : null;
   const next =
     (get<{ n: number | null }>('SELECT max(position) AS n FROM asset_links WHERE code_id = ? AND direction = ?', codeId, input.direction)?.n ?? -1) + 1;
   const linkId = newId();
   run(
-    'INSERT INTO asset_links (id, code_id, direction, path, detail, asset_id, position) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    `INSERT INTO asset_links (id, code_id, direction, path, detail, asset_id, position, provenance_source, provenance_ref)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     linkId, codeId, input.direction, path, input.detail ?? '', assetId, next,
+    provenance.provenance?.source ?? '', provenance.provenance?.ref ?? '',
   );
   setAssetLinkTags(linkId, input.tags ?? []);
   touch(codeId, actor);
@@ -640,6 +694,7 @@ export function updateAssetLink(assetLinkId: string, patch: Partial<AssetLinkInp
   const fields: string[] = ['path = ?', 'direction = ?', 'asset_id = ?'];
   const values: (string | number | null)[] = [path, direction, assetId];
   if (patch.detail !== undefined) { fields.push('detail = ?'); values.push(patch.detail); }
+  provenanceWrite(patch.provenance, fields, values);
   run(`UPDATE asset_links SET ${fields.join(', ')} WHERE id = ?`, ...values, assetLinkId);
 
   if (patch.tags !== undefined) setAssetLinkTags(assetLinkId, patch.tags);

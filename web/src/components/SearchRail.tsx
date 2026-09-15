@@ -26,6 +26,7 @@ export function SearchRail() {
   const query = useAtlas((s) => s.query);
   const tagFilter = useAtlas((s) => s.tagFilter);
   const dateFilter = useAtlas((s) => s.dateFilter);
+  const provenanceFilter = useAtlas((s) => s.provenanceFilter);
   const selectedId = useAtlas((s) => s.selectedId);
   const connectFrom = useAtlas((s) => s.connectFrom);
   const selectedIds = useAtlas((s) => s.selectedIds);
@@ -58,7 +59,10 @@ export function SearchRail() {
     searchRef.current?.focus();
   }, [connectFrom, bulkConnectFrom, setRailTab]);
 
-  const filters = useMemo(() => ({ query, tags: tagFilter, dates: dateFilter }), [query, tagFilter, dateFilter]);
+  const filters = useMemo(
+    () => ({ query, tags: tagFilter, dates: dateFilter, provenance: provenanceFilter }),
+    [query, tagFilter, dateFilter, provenanceFilter],
+  );
   const visible = useMemo(() => codes.filter((n) => matches(n, filters)), [codes, filters]);
   /**
    * Sections are whatever the chosen field actually contains — there is no

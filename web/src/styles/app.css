@@ -348,6 +348,10 @@ textarea.desc-box:focus { outline: none; }
 }
 .io-row .p { font-family: 'IBM Plex Mono', monospace; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
 .io-row .s { font-size: 10px; color: var(--ink-3); display: block; }
+/* Evidence behind a declared input/output. "inferred" is the one a reviewer
+   is hunting for, so it alone is coloured; the rest stay quiet. */
+.io-row .s .evidence { margin-left: 6px; padding: 0 4px; border: 1px solid var(--line, currentColor); border-radius: 3px; font-size: 9.5px; }
+.io-row .s .evidence.ev-inferred { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
 .io-row.ds .gl { background: var(--accent-wash); color: var(--accent); }
 .io-row.ds:hover .p { color: var(--accent); text-decoration: underline; }
 .io-row .go { font-size: 10px; color: var(--accent); opacity: 0; }

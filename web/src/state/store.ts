@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { api, ApiError } from '../api/client';
-import type { AssetLinkInput, AssetSummary, Code, CodePatch, DateRange, GraphEdge, Pipeline, VersionInfo } from '../types';
+import type { AssetLinkInput, AssetSummary, Code, CodePatch, DateRange, GraphEdge, Pipeline, ProvenanceSource, VersionInfo } from '../types';
 import { ANY_DATE, codeColor } from '../types';
 
 export type Mode = 'select' | 'connect';
@@ -95,6 +95,8 @@ interface AtlasState {
   /** A window on one stewardship date, shared by the Codes and Assets tabs the
    * same way the search box and the tag chips are. */
   dateFilter: DateRange;
+  /** Evidence sources to keep — see `Filters.provenance`. */
+  provenanceFilter: Set<ProvenanceSource>;
   mode: Mode;
   connectFrom: string | null;
   menu: { x: number; y: number; codeId: string } | null;
@@ -127,6 +129,8 @@ interface AtlasState {
   setQuery: (query: string) => void;
   toggleTagFilter: (tag: string) => void;
   clearTagFilters: () => void;
+  toggleProvenanceFilter: (source: ProvenanceSource) => void;
+  clearProvenanceFilters: () => void;
   /** Merges into the current window — the field, one bound, or both. */
   setDateFilter: (patch: Partial<DateRange>) => void;
   clearDateFilter: () => void;
@@ -244,6 +248,7 @@ export const useAtlas = create<AtlasState>((set, get) => ({
   query: '',
   tagFilter: new Set(),
   dateFilter: ANY_DATE,
+  provenanceFilter: new Set(),
   mode: 'select',
   connectFrom: null,
   menu: null,
@@ -301,6 +306,7 @@ export const useAtlas = create<AtlasState>((set, get) => ({
       query: '',
       tagFilter: new Set(),
       dateFilter: ANY_DATE,
+      provenanceFilter: new Set(),
       mode: 'select',
       connectFrom: null,
       menu: null,
@@ -373,7 +379,7 @@ export const useAtlas = create<AtlasState>((set, get) => ({
       if (texts.length > 2 || (texts.length === 2 && !catalog)) {
         throw new Error('Choose one file, or a dbt manifest.json together with its catalog.json.');
       }
-      const { pipeline, source, upgrades, warnings, converted } = await api.importPipeline(main, undefined, catalog);
+      const { pipeline, source, upgrades, warnings, notes = [], converted } = await api.importPipeline(main, undefined, catalog);
       await get().selectPipeline(pipeline.id);
 
       // The file landed whole either way, but *how* it landed is worth keeping:
@@ -382,6 +388,7 @@ export const useAtlas = create<AtlasState>((set, get) => ({
       // headline, since one line cannot carry a list.
       if (converted) console.info(`[atlas import] converted — ${converted}`);
       for (const note of upgrades) console.info(`[atlas import] upgraded — ${note}`);
+      for (const note of notes) console.info(`[atlas import] filled in — ${note}`);
       for (const note of warnings) console.warn(`[atlas import] repaired — ${note}`);
 
       const parts = [
@@ -535,6 +542,14 @@ export const useAtlas = create<AtlasState>((set, get) => ({
     });
   },
   clearTagFilters() { set({ tagFilter: new Set() }); },
+  toggleProvenanceFilter(source) {
+    set((s) => {
+      const next = new Set(s.provenanceFilter);
+      if (next.has(source)) next.delete(source); else next.add(source);
+      return { provenanceFilter: next };
+    });
+  },
+  clearProvenanceFilters() { set({ provenanceFilter: new Set() }); },
   setDateFilter(patch) { set((s) => ({ dateFilter: { ...s.dateFilter, ...patch } })); },
   clearDateFilter() { set({ dateFilter: ANY_DATE }); },
   setMode(mode) {

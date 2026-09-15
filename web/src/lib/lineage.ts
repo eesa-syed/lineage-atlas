@@ -1,4 +1,4 @@
-import { withinDates, type Code, type DateRange, type GraphEdge } from '../types';
+import { withinDates, type Code, type DateRange, type GraphEdge, type ProvenanceSource } from '../types';
 
 /** Every code reachable by walking edges backwards from `id`. */
 export function upstream(id: string, edges: GraphEdge[]): Set<string> {
@@ -36,6 +36,17 @@ export interface Filters {
   query: string;
   tags: Set<string>;
   dates: DateRange;
+  /** Evidence sources to keep. A code counts if it, or any of its inputs and outputs, carries one. */
+  provenance: Set<ProvenanceSource>;
+}
+
+/** Every evidence source a code carries — on itself or on any declared input or output. */
+export function provenanceSources(code: Code): Set<ProvenanceSource> {
+  const found = new Set<ProvenanceSource>();
+  for (const holder of [code, ...code.inputs, ...code.outputs]) {
+    if (holder.provenance) found.add(holder.provenance.source);
+  }
+  return found;
 }
 
 /**
@@ -50,6 +61,7 @@ export interface Filters {
 export function matches(code: Code, filters: Filters): boolean {
   if (!withinDates(code, filters.dates)) return false;
   if (filters.tags.size && !code.tags.some((t) => filters.tags.has(t))) return false;
+  if (filters.provenance.size && ![...provenanceSources(code)].some((s) => filters.provenance.has(s))) return false;
   const q = filters.query.trim().toLowerCase();
   if (!q) return true;
   const haystack = [

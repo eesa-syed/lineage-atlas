@@ -17,14 +17,14 @@
 
 export const APP_NAME = 'lineage-atlas';
 export const APP_TITLE = 'Lineage Atlas';
-export const APP_VERSION = '1.0.0';
+export const APP_VERSION = '1.0.1';
 
 /** The `format` discriminator every bundle carries. Never changes — a rename
  * would make every file in the wild unreadable rather than upgradeable. */
 export const BUNDLE_FORMAT = 'lineage-atlas.pipeline';
 
 /** Current on-disk format. Bump ⇒ add an upgrade step in `bundle.ts`. */
-export const BUNDLE_VERSION = 8;
+export const BUNDLE_VERSION = 9;
 
 /** Oldest format this build can still read and upgrade. */
 export const MIN_BUNDLE_VERSION = 1;

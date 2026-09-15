@@ -15,31 +15,48 @@ const here = dirname(fileURLToPath(import.meta.url));
 const server = (file) => import(resolve(here, '../server/dist', file));
 
 /** Everything `server/src/cli.ts` answers to. */
-const FILE_COMMANDS = new Set(['list', 'export', 'import', 'validate', 'from-dbt', 'version']);
+const FILE_COMMANDS = new Set([
+  'list', 'summary', 'export', 'import', 'validate', 'from-dbt', 'scan', 'status', 'install-skill', 'version',
+]);
+
+/** Flags the CLI reads itself, passed through untouched. */
+const PASS_VALUE = new Set(['--catalog', '--replace', '--name', '--port']);
+const PASS_BOOLEAN = new Set(['--relink', '--project', '--link', '--force']);
 
 const HELP = `lineage-atlas — search a column, see where it comes from and everything it feeds
 
 Usage
   lineage-atlas                       start the app and open it in a browser
   lineage-atlas serve [options]       the same, without opening a browser first
+  lineage-atlas status                is an Atlas running — port, version, database
   lineage-atlas list                  list pipelines with their code and edge counts
+  lineage-atlas summary <id>          the pipeline's shape as a plain adjacency list
   lineage-atlas export <id> [file]    write a pipeline to an .atlas.json file
   lineage-atlas validate <file>       check a file without importing it
   lineage-atlas import <file> [name]  read an .atlas.json file in as a new pipeline
                                       — or a dbt target/manifest.json, directly
   lineage-atlas from-dbt <manifest.json> [file]
                                       convert a dbt project to an .atlas.json file
-  lineage-atlas version               print the app and file-format versions
+  lineage-atlas scan <dir> [file]     draft an .atlas.json from source files
+                                      (Python, SQL, …); every link is unverified
+  lineage-atlas install-skill         install the Claude Code skill for every project
+  lineage-atlas version               print the app, file-format and skill versions
 
 Options
   --db <file>     database file to open (any command)
-  --port <n>      port to listen on; serve only (default: 5174, or the next free)
+  --no-seed       a fresh database gets no demo pipeline (any command)
+  --port <n>      port to listen on; serve and status (default: 5174, or the next free)
   --no-open       do not open a browser; serve only
   --catalog <file>  dbt catalog.json for column types; import, validate, from-dbt
+  --relink        also derive edges from inputs/outputs; import, validate
+  --replace <id>  replace that pipeline's contents, keeping its id; import
+  --name <name>   the pipeline name; scan
+  --project       install into ./.claude/skills instead of ~/.claude/skills; install-skill
+  --link          symlink rather than copy, so it never goes stale; install-skill
 
 Environment
   ATLAS_PORT      same as --port          ATLAS_DB       same as --db
-  ATLAS_NO_OPEN   same as --no-open
+  ATLAS_NO_OPEN   same as --no-open       ATLAS_NO_SEED  same as --no-seed
   ATLAS_HOST      interface to listen on (default 127.0.0.1 — this machine only)
   ATLAS_ALLOWED_HOSTS  comma-separated host names to accept besides localhost
 
@@ -86,15 +103,19 @@ function takeDbFlag(args) {
       }
       process.env.ATLAS_DB = resolve(value);
       i += 1;
-    } else if (arg === '--catalog') {
+    } else if (arg === '--no-seed') {
+      process.env.ATLAS_NO_SEED = '1';
+    } else if (PASS_VALUE.has(arg)) {
       // Passed through: the CLI resolves it, alongside the file it belongs to.
       const value = args[i + 1];
       if (value === undefined || value.startsWith('--')) {
-        console.error('--catalog needs a value.');
+        console.error(`${arg} needs a value.`);
         process.exit(1);
       }
       operands.push(arg, value);
       i += 1;
+    } else if (PASS_BOOLEAN.has(arg)) {
+      operands.push(arg);
     } else if (arg.startsWith('--')) {
       console.error(`Unknown option: ${arg}\n`);
       console.error(HELP);
@@ -129,6 +150,7 @@ function applyServeFlags(flags) {
     if (flag === '--port' || flag === '-p') process.env.ATLAS_PORT = value();
     else if (flag === '--db') process.env.ATLAS_DB = resolve(value());
     else if (flag === '--no-open') process.env.ATLAS_NO_OPEN = '1';
+    else if (flag === '--no-seed') process.env.ATLAS_NO_SEED = '1';
     else if (flag === '--open') delete process.env.ATLAS_NO_OPEN;
     else {
       console.error(`Unknown option: ${flag}\n`);

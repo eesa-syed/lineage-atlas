@@ -1,6 +1,8 @@
 import { nanoid } from 'nanoid';
 import { all, get, isoTime, newEntityId, NOW, run, tx, uniqueId } from './db.js';
 import { convertDbtManifest, isDbtManifest, otherDbtArtifact } from './dbt.js';
+import { layeredLayout, MARGIN, ROW_HEIGHT } from './layout.js';
+import { hasPlaceholder, provenanceOf, readProvenance, templateKey } from './provenance.js';
 import { ConflictError, getPipeline } from './repo.js';
 import {
   BUNDLE_FORMAT,
@@ -41,9 +43,17 @@ export function exportPipeline(graphId: string): AtlasBundle {
     id: string; name: string; x: number; y: number; description: string;
     owner: string; status: CodeStatus;
     updated_by: string; created_at: string; updated_at: string;
+    provenance_source: string; provenance_ref: string;
   }>('SELECT * FROM codes WHERE graph_id = ? ORDER BY x, y', graphId);
 
-  const codes: BundleCode[] = codeRows.map((n) => ({
+  // Provenance is written only where it is known: an absent key reads as
+  // "unknown", which keeps a file that never used it byte-for-byte as before.
+  const withProvenance = <T extends object>(record: T, row: { provenance_source: string; provenance_ref: string }) => {
+    const provenance = provenanceOf(row);
+    return provenance ? { ...record, provenance } : record;
+  };
+
+  const codes: BundleCode[] = codeRows.map((n) => withProvenance({
     id: n.id,
     name: n.name,
     x: n.x,
@@ -56,18 +66,22 @@ export function exportPipeline(graphId: string): AtlasBundle {
     updatedBy: n.updated_by,
     tags: all<{ tag: string }>('SELECT tag FROM code_tags WHERE code_id = ? ORDER BY position, tag', n.id).map((t) => t.tag),
     steps: all('SELECT position, op, title, body FROM flow_steps WHERE code_id = ? ORDER BY position', n.id),
-    assetLinks: all<{ id: string; direction: Direction; path: string; detail: string; asset_id: string | null; position: number }>(
-      'SELECT id, direction, path, detail, asset_id, position FROM asset_links WHERE code_id = ? ORDER BY direction, position',
+    assetLinks: all<{
+      id: string; direction: Direction; path: string; detail: string; asset_id: string | null; position: number;
+      provenance_source: string; provenance_ref: string;
+    }>(
+      `SELECT id, direction, path, detail, asset_id, position, provenance_source, provenance_ref
+       FROM asset_links WHERE code_id = ? ORDER BY direction, position`,
       n.id,
-    ).map((a) => ({
+    ).map((a) => withProvenance({
       direction: a.direction,
       path: a.path,
       detail: a.detail,
       tags: all<{ tag: string }>('SELECT tag FROM asset_link_tags WHERE asset_link_id = ? ORDER BY position, tag', a.id).map((t) => t.tag),
       assetRef: a.asset_id,
       position: a.position,
-    })),
-  }));
+    }, a)),
+  }, n));
 
   const assets: BundleAsset[] = all<{
     id: string; name: string; code_id: string | null; materialization: string; description: string;
@@ -117,11 +131,7 @@ export function exportPipeline(graphId: string): AtlasBundle {
   };
 }
 
-/** `analytics-warehouse-2026-09-08.atlas.json` */
-export function bundleFilename(bundle: AtlasBundle): string {
-  const slug = bundle.pipeline.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'pipeline';
-  return `${slug}-${bundle.exportedAt.slice(0, 10)}.atlas.json`;
-}
+export { bundleFilename } from './bundle-name.js';
 
 /* ---------------------------------------------------------------- import */
 
@@ -130,6 +140,19 @@ export class BundleError extends Error {}
 export interface ReadOptions {
   /** A dbt `catalog.json`, used only when the file is a dbt manifest. */
   catalog?: Record<string, any> | null;
+  /**
+   * Derive edges from the declarations as well as reading the listed ones: the
+   * producer of every asset feeds every code that lists it as an input. An
+   * asset with `producedBy: null` implies no edges, which is how a shared-state
+   * table (a run registry, a log sink) stays documented without wiring every
+   * writer to every reader.
+   */
+  relink?: boolean;
+}
+
+export interface ImportOptions extends ReadOptions {
+  /** Replace this existing pipeline's contents, keeping its id. */
+  replace?: string;
 }
 
 /* ------------------------------------------------- format upgrade ladder */
@@ -229,6 +252,10 @@ const UPGRADES: Record<number, UpgradeStep> = {
       assets: (b.assets ?? []).map(({ sampleRows, ...asset }: any) => asset),
     }),
   },
+  8: {
+    note: 'optional provenance added to codes and inputs/outputs; an older file simply has none',
+    apply: (b) => ({ ...b, formatVersion: 9 }),
+  },
   6: {
     note: 'createdAt, updatedAt and updatedBy added to every code and asset, and owner added to assets; older files are dated from when they were exported, with no editor named',
     apply: (b) => {
@@ -291,11 +318,13 @@ function reaches(from: string, to: string, adjacency: Map<string, string[]>): bo
   return false;
 }
 
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
 /**
  * Reads a file into the shape this build understands: gates the envelope,
  * upgrades it, then checks the contents.
  *
- * Two classes of problem, deliberately kept apart:
+ * Three classes of outcome, deliberately kept apart:
  *
  *  - **Errors** throw `BundleError` and nothing is written. These are things
  *    that make the file meaningless: wrong format, a version from the future, a
@@ -305,6 +334,10 @@ function reaches(from: string, to: string, adjacency: Map<string, string[]>): bo
  *    reading: a dangling asset reference, a duplicate edge, an edge that would
  *    close a cycle. The import still lands whole and the user is told what
  *    changed.
+ *  - **Notes** say what was filled in because the file left it out on purpose:
+ *    positions, `assetRef` resolved by path, `producedBy` resolved from the one
+ *    code that outputs an asset, coordinates laid out, edges derived. A short
+ *    file is a legitimate file, and none of that is a repair.
  *
  * The cycle check matters most. The graph is acyclic by construction everywhere
  * else in the app, and a file is the one way an edge could ever arrive without
@@ -328,7 +361,7 @@ export function readBundle(input: unknown, options: ReadOptions = {}): BundleRea
   }
   if (isDbtManifest(input)) {
     const { bundle, summary, notes } = convertDbtManifest(input, options.catalog);
-    const read = readBundle(bundle);
+    const read = readBundle(bundle, { relink: options.relink });
     return { ...read, converted: summary, warnings: [...notes, ...read.warnings] };
   }
   if (options.catalog) throw new BundleError('--catalog only applies when importing a dbt manifest.json.');
@@ -355,6 +388,7 @@ export function readBundle(input: unknown, options: ReadOptions = {}): BundleRea
 
   const { bundle, upgrades } = upgradeBundle(raw);
   const warnings: string[] = [];
+  const notes: string[] = [];
 
   if (!Array.isArray(bundle.codes) || !Array.isArray(bundle.edges) || !Array.isArray(bundle.assets)) {
     throw new BundleError('The file is missing its codes, edges or assets.');
@@ -363,10 +397,12 @@ export function readBundle(input: unknown, options: ReadOptions = {}): BundleRea
 
   /* codes */
   const codeIds = new Set<string>();
+  const codeName = new Map<string, string>();
   for (const code of bundle.codes) {
     if (!code.id || !code.name) throw new BundleError('Every code needs an id and a name.');
     if (codeIds.has(code.id)) throw new BundleError(`Duplicate code id in the file: ${code.id}`);
     codeIds.add(code.id);
+    codeName.set(code.id, code.name);
     if (code.status && !STATUSES.includes(code.status)) {
       throw new BundleError(`Unknown status "${code.status}" on ${code.name}.`);
     }
@@ -375,34 +411,121 @@ export function readBundle(input: unknown, options: ReadOptions = {}): BundleRea
         throw new BundleError(`An input/output on ${code.name} has an unknown direction "${link.direction}".`);
       }
     }
+
+    // Position is the order within an array, so an omitted one *is* the index:
+    // steps by their place, links by their place within their own direction.
+    (code.steps ?? []).forEach((step, i) => { step.position ??= i; });
+    const seenPerDirection = { input: 0, output: 0 };
+    for (const link of code.assetLinks ?? []) link.position ??= seenPerDirection[link.direction]++;
+
+    // An unreadable provenance is dropped with a warning, not refused: the
+    // claim itself is still worth importing, only the evidence note is lost.
+    const checkProvenance = (holder: { provenance?: unknown }, where: string) => {
+      const { provenance, invalid } = readProvenance(holder.provenance);
+      if (invalid) warnings.push(`Dropped the provenance on ${where}: ${invalid}.`);
+      if (provenance) holder.provenance = provenance;
+      else delete holder.provenance;
+    };
+    checkProvenance(code, `"${code.name}"`);
+    for (const link of code.assetLinks ?? []) checkProvenance(link, `"${code.name}" ${link.direction} ${link.path}`);
   }
 
   /* assets */
   const assetIds = new Set<string>();
+  const assetsByName = new Map<string, string[]>();
+  const producerOmitted = new Set<string>();
   for (const asset of bundle.assets) {
     if (!asset.id || !asset.name) throw new BundleError('Every asset needs an id and a name.');
     if (assetIds.has(asset.id)) throw new BundleError(`Duplicate asset id in the file: ${asset.id}`);
     assetIds.add(asset.id);
+    assetsByName.set(asset.name.trim(), [...(assetsByName.get(asset.name.trim()) ?? []), asset.id]);
+    (asset.columns ?? []).forEach((column, i) => { column.position ??= i; });
+    if (asset.producedBy === undefined) producerOmitted.add(asset.id);
     if (asset.producedBy && !codeIds.has(asset.producedBy)) {
       warnings.push(`Asset "${asset.name}" names a producer that is not in the file; it will import without one.`);
       asset.producedBy = null;
     }
   }
 
+  // Asset names that differ only in how a placeholder is spelled — `<id>` on
+  // one, `{run_id}` on the other — are almost always one thing written twice,
+  // and exact matching would silently keep them apart.
+  const assetsByTemplate = new Map<string, string[]>();
+  for (const name of assetsByName.keys()) {
+    if (!hasPlaceholder(name)) continue;
+    assetsByTemplate.set(templateKey(name), [...(assetsByTemplate.get(templateKey(name)) ?? []), name]);
+  }
+  for (const names of assetsByTemplate.values()) {
+    if (names.length > 1) {
+      warnings.push(`Assets ${names.map((n) => `"${n}"`).join(' and ')} differ only in placeholder spelling — if they are the same path, use one spelling.`);
+    }
+  }
+
   /* asset links point at assets in the same file */
+  let resolvedRefs = 0;
   for (const code of bundle.codes) {
     for (const link of code.assetLinks ?? []) {
-      if (link.assetRef && !assetIds.has(link.assetRef)) {
+      if (link.assetRef === undefined) {
+        // Omitted, not null: resolve by name. `null` stays a deliberate
+        // "undocumented path", so exported files round-trip unchanged.
+        const matches = assetsByName.get(link.path?.trim() ?? '') ?? [];
+        if (matches.length === 1) {
+          link.assetRef = matches[0];
+          resolvedRefs += 1;
+        } else {
+          link.assetRef = null;
+          if (matches.length > 1) {
+            warnings.push(`"${code.name}" ${link.direction} ${link.path} matches ${matches.length} assets of that name; set assetRef to choose one.`);
+          } else if (hasPlaceholder(link.path ?? '')) {
+            const near = assetsByTemplate.get(templateKey(link.path)) ?? [];
+            if (near.length) {
+              warnings.push(`"${code.name}" ${link.direction} ${link.path} matches no asset, but "${near[0]}" differs only in placeholder spelling.`);
+            }
+          }
+        }
+      } else if (link.assetRef && !assetIds.has(link.assetRef)) {
         warnings.push(`"${code.name}" points at asset "${link.assetRef}", which is not in the file; that input/output imports without a schema.`);
         link.assetRef = null;
       }
     }
   }
+  if (resolvedRefs) notes.push(`resolved ${plural(resolvedRefs, 'assetRef')} by matching path to asset name`);
+
+  /* producers: omitted means "whichever code outputs it", when that is one code */
+  const writers = new Map<string, Set<string>>();
+  for (const code of bundle.codes) {
+    for (const link of code.assetLinks ?? []) {
+      if (link.direction !== 'output' || !link.assetRef) continue;
+      writers.set(link.assetRef, (writers.get(link.assetRef) ?? new Set()).add(code.id));
+    }
+  }
+  let resolvedProducers = 0;
+  for (const asset of bundle.assets) {
+    if (!producerOmitted.has(asset.id)) continue;
+    const by = [...(writers.get(asset.id) ?? [])];
+    asset.producedBy = by.length === 1 ? by[0] : null;
+    if (by.length === 1) resolvedProducers += 1;
+    // Several writers is the shape of shared state — a run registry, a log
+    // sink. Picking one would draw edges from an arbitrary writer to every
+    // reader, so none is picked and the author is told how to choose.
+    if (by.length > 1) {
+      warnings.push(
+        `Asset "${asset.name}" is output by ${by.length} codes, so it has no producer and implies no edges. ` +
+          'Set producedBy to one of them if one really owns it, or producedBy: null to say so explicitly.',
+      );
+    }
+  }
+  if (resolvedProducers) notes.push(`resolved ${plural(resolvedProducers, 'producer')} from the one code that outputs each asset`);
 
   /* edges: every endpoint must exist, and the result must stay acyclic */
   const adjacency = new Map<string, string[]>();
   const kept: { source: string; target: string }[] = [];
   const seenPairs = new Set<string>();
+  const accept = (source: string, target: string) => {
+    seenPairs.add(`${source}\u0000${target}`);
+    adjacency.set(source, [...(adjacency.get(source) ?? []), target]);
+    kept.push({ source, target });
+  };
   for (const edge of bundle.edges) {
     if (!codeIds.has(edge.source) || !codeIds.has(edge.target)) {
       throw new BundleError('An edge refers to a code that is not in the file.');
@@ -411,8 +534,7 @@ export function readBundle(input: unknown, options: ReadOptions = {}): BundleRea
       warnings.push(`Skipped a link from "${edge.source}" to itself.`);
       continue;
     }
-    const pair = `${edge.source} ${edge.target}`;
-    if (seenPairs.has(pair)) {
+    if (seenPairs.has(`${edge.source}\u0000${edge.target}`)) {
       warnings.push(`Skipped a duplicate link ${edge.source} to ${edge.target}.`);
       continue;
     }
@@ -420,27 +542,53 @@ export function readBundle(input: unknown, options: ReadOptions = {}): BundleRea
       warnings.push(`Skipped link ${edge.source} to ${edge.target}: it would close a cycle, and the graph is kept acyclic.`);
       continue;
     }
-    seenPairs.add(pair);
-    adjacency.set(edge.source, [...(adjacency.get(edge.source) ?? []), edge.target]);
-    kept.push({ source: edge.source, target: edge.target });
+    accept(edge.source, edge.target);
+  }
+
+  // Derived after the listed edges, so a hand-written edge always wins and a
+  // derived one only fills in what the file did not already say.
+  if (options.relink) {
+    let derived = 0;
+    for (const asset of bundle.assets) {
+      if (!asset.producedBy) continue;
+      for (const code of bundle.codes) {
+        const reads = (code.assetLinks ?? []).some((l) => l.direction === 'input' && l.assetRef === asset.id);
+        if (!reads || code.id === asset.producedBy || seenPairs.has(`${asset.producedBy}\u0000${code.id}`)) continue;
+        if (reaches(code.id, asset.producedBy, adjacency)) {
+          warnings.push(
+            `Did not derive a link from "${codeName.get(asset.producedBy)}" to "${code.name}" through ${asset.name}: it would close a cycle. ` +
+              'A cycle usually means an input or output is mis-declared.',
+          );
+          continue;
+        }
+        accept(asset.producedBy, code.id);
+        derived += 1;
+      }
+    }
+    notes.push(`derived ${plural(derived, 'edge')} from declared inputs and outputs`);
   }
   bundle.edges = kept;
 
   /* counts are a courtesy, not a contract: say so rather than refusing */
   const actual = { codes: bundle.codes.length, edges: bundle.edges.length, assets: bundle.assets.length };
   const declared = bundle.counts;
-  if (
-    sourceVersion === BUNDLE_VERSION &&
-    declared &&
-    (declared.codes !== actual.codes || declared.assets !== actual.assets)
-  ) {
+  if (declared && (declared.codes !== actual.codes || declared.assets !== actual.assets)) {
     warnings.push(
       `The file declares ${declared.codes} codes and ${declared.assets} assets but holds ${actual.codes} and ${actual.assets}. Importing what is actually there.`,
     );
   }
   bundle.counts = actual;
 
-  return { bundle, sourceVersion, upgrades, warnings };
+  /* codes with no position at all are laid out, below any that have one */
+  const unplaced = bundle.codes.filter((c) => typeof c.x !== 'number' && typeof c.y !== 'number');
+  if (unplaced.length) {
+    const placed = bundle.codes.filter((c) => !unplaced.includes(c));
+    const top = placed.length ? Math.max(...placed.map((c) => c.y ?? 0)) + ROW_HEIGHT : MARGIN;
+    layeredLayout(unplaced, bundle.edges, top);
+    notes.push(`laid out ${plural(unplaced.length, 'code')} that had no x/y`);
+  }
+
+  return { bundle, sourceVersion, upgrades, warnings, notes };
 }
 
 /**
@@ -452,24 +600,42 @@ export function validateBundle(input: unknown): AtlasBundle {
 }
 
 /**
- * Writes a bundle in as a brand-new pipeline. Ids are remapped on the way in,
+ * Writes a bundle in as a brand-new pipeline — or, with `replace`, in place of
+ * an existing pipeline's contents. Ids inside the file are remapped either way,
  * so importing the same file twice gives two independent pipelines rather than
  * a collision, which is what makes a bundle safe to pass around.
+ *
+ * `replace` keeps the pipeline's id, so bookmarks and `?graph=` links survive an
+ * edit → re-import → review loop. It is not a merge: everything the pipeline
+ * held is replaced by what the file holds, and there is no conflict policy
+ * because there is nothing to reconcile. It refuses a pipeline that does not
+ * exist rather than quietly creating one under a typo.
  *
  * Everything below runs in one transaction, after `readBundle` has already had
  * the final say on the contents: an import lands whole or not at all.
  */
-export function importBundle(input: unknown, nameOverride?: string, options: ReadOptions = {}): ImportResult {
-  const { bundle, sourceVersion, upgrades, warnings, converted } = readBundle(input, options);
+export function importBundle(input: unknown, nameOverride?: string, options: ImportOptions = {}): ImportResult {
+  const { bundle, sourceVersion, upgrades, warnings, notes, converted } = readBundle(input, options);
+  const name = (nameOverride?.trim() || bundle.pipeline.name).trim();
 
   const pipeline = tx(() => {
-    const graphId = uniqueId('graphs', nameOverride?.trim() || bundle.pipeline.name);
-    run(
-      'INSERT INTO graphs (id, name, description) VALUES (?, ?, ?)',
-      graphId,
-      (nameOverride?.trim() || bundle.pipeline.name).trim(),
-      bundle.pipeline.description ?? '',
-    );
+    let graphId: string;
+    if (options.replace) {
+      graphId = options.replace;
+      if (!get('SELECT id FROM graphs WHERE id = ?', graphId)) {
+        throw new BundleError(`There is no pipeline "${graphId}" to replace. Run \`lineage-atlas list\` for the ids, or import without --replace.`);
+      }
+      // Codes cascade to their tags, links, flows and edges; assets to columns.
+      run('DELETE FROM codes WHERE graph_id = ?', graphId);
+      run('DELETE FROM assets WHERE graph_id = ?', graphId);
+      run(
+        `UPDATE graphs SET name = ?, description = ?, updated_at = ${NOW} WHERE id = ?`,
+        name, bundle.pipeline.description ?? '', graphId,
+      );
+    } else {
+      graphId = uniqueId('graphs', name);
+      run('INSERT INTO graphs (id, name, description) VALUES (?, ?, ?)', graphId, name, bundle.pipeline.description ?? '');
+    }
 
     const codeIds = new Map<string, string>();
     for (const code of bundle.codes) {
@@ -480,11 +646,12 @@ export function importBundle(input: unknown, nameOverride?: string, options: Rea
       // database key: keeping it is what makes `export → import → export`
       // lossless in everything but ids. A file that names neither is dated now.
       run(
-        `INSERT INTO codes (id, graph_id, name, x, y, description, owner, status, updated_by, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, coalesce(?, ${NOW}), coalesce(?, ${NOW}))`,
+        `INSERT INTO codes (id, graph_id, name, x, y, description, owner, status, updated_by, created_at, updated_at, provenance_source, provenance_ref)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, coalesce(?, ${NOW}), coalesce(?, ${NOW}), ?, ?)`,
         id, graphId, code.name, code.x ?? 0, code.y ?? 0,
         code.description ?? '', code.owner ?? '', normaliseStatus(code.status),
         code.updatedBy ?? '', code.createdAt || null, code.updatedAt || null,
+        code.provenance?.source ?? '', code.provenance?.ref ?? '',
       );
       // Tag order is meaningful, so it survives the round trip.
       (code.tags ?? []).forEach((tag, i) => {
@@ -515,7 +682,7 @@ export function importBundle(input: unknown, nameOverride?: string, options: Rea
         run(
           `INSERT INTO asset_columns (id, asset_id, name, data_type, key_kind, nullable, description, tests, position)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          newId(), id, column.name, column.dataType,
+          newId(), id, column.name, column.dataType ?? 'varchar',
           column.keyKind === 'pk' || column.keyKind === 'fk' ? column.keyKind : null,
           column.nullable ? 1 : 0, column.description ?? '',
           (column.tests ?? []).join(', '), column.position ?? 0,
@@ -528,10 +695,12 @@ export function importBundle(input: unknown, nameOverride?: string, options: Rea
       for (const link of code.assetLinks ?? []) {
         const linkId = newId();
         run(
-          'INSERT INTO asset_links (id, code_id, direction, path, detail, asset_id, position) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          `INSERT INTO asset_links (id, code_id, direction, path, detail, asset_id, position, provenance_source, provenance_ref)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           linkId, codeId, link.direction, link.path, link.detail ?? '',
           link.assetRef ? assetIds.get(link.assetRef) ?? null : null,
           link.position ?? 0,
+          link.provenance?.source ?? '', link.provenance?.ref ?? '',
         );
         (link.tags ?? []).forEach((tag, i) => {
           run('INSERT OR IGNORE INTO asset_link_tags (asset_link_id, tag, position) VALUES (?, ?, ?)', linkId, tag, i);
@@ -565,6 +734,8 @@ export function importBundle(input: unknown, nameOverride?: string, options: Rea
     source: { formatVersion: sourceVersion, generator: from, exportedAt: bundle.exportedAt ?? '' },
     upgrades,
     warnings,
+    notes,
     ...(converted ? { converted } : {}),
+    ...(options.replace ? { replaced: true } : {}),
   };
 }
