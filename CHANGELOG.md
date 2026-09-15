@@ -25,6 +25,8 @@ independent of the release version. Its history is in
 
 ### Added
 
+- **On npm.** `npx lineage-atlas` starts Atlas with nothing to clone or build,
+  and `npm install -g lineage-atlas` keeps the command. The README leads with it.
 - **A logo.** Three sources converge on a model that writes one table — the
   shape of every pipeline Atlas draws. It is the favicon, the top-bar mark, and
   the README header (`.github/assets/`: `logo-light.png`, `logo-dark.png`,

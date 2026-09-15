@@ -36,7 +36,7 @@ see **Operating it**.
 
 | Need | Do |
 |---|---|
-| Start it | `npm run build && npm start` or `npm run dev` (checkout); `lineage-atlas` if the command is installed. Not on npm yet, so `npx lineage-atlas` fails |
+| Start it | `npx lineage-atlas` (or `lineage-atlas` if installed with `npm install -g lineage-atlas`); from a checkout, `npm run build && npm start` or `npm run dev`. Every other command works the same way: `npx lineage-atlas import …` |
 | Start it without a browser | `lineage-atlas serve`, or `ATLAS_NO_OPEN=1` |
 | Is it running, and on which port and database | `lineage-atlas status` (`npm run status` in a checkout) — starts nothing, opens no database |
 | Is it alive | `GET /api/health` → `{ ok, version }`; `GET /api/version` also names the `db` file |
@@ -100,8 +100,8 @@ Then, as needed:
 | Assets a code could link to, id + name only | `GET /api/codes/:id/linkable-assets` |
 
 **Trace a column back:** find the code whose `searchTerms` hold the column (full
-graph), then walk `edges` backwards (the summary is enough for this part) (`target → source`) to the sources. Acyclic, so it
-terminates. `GET /api/codes/:id/flow` at each hop explains what happened to the
+graph), then walk `edges` backwards (`target → source`) to the sources — the
+summary is enough for the walk. Acyclic, so it terminates. `GET /api/codes/:id/flow` at each hop explains what happened to the
 value there.
 
 **Impact analysis:** walk `edges` forwards from the code, then

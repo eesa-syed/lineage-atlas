@@ -159,12 +159,33 @@ dark** themes; and a full **REST API** that drives everything the UI can do.
 - That's all. There's no database server, no native compiler toolchain and no
   Docker.
 
-> [!NOTE]
-> Lineage Atlas is **not on npm yet**, so `npx lineage-atlas` and
-> `npm install -g lineage-atlas` won't work. For now, install from source using
-> the steps below. It takes about a minute.
+### Quick start
 
-### 1. Clone and install
+```bash
+npx lineage-atlas
+```
+
+That downloads Atlas, starts it and opens it in your browser. The first start
+creates a database and loads a demo analytics warehouse, so you have something
+to explore right away. Add `--no-seed` (or set `ATLAS_NO_SEED=1`) for an empty
+database instead.
+
+To keep the `lineage-atlas` command around, install it globally:
+
+```bash
+npm install -g lineage-atlas
+lineage-atlas            # starts the app and opens your browser
+```
+
+An installed copy keeps its database in your per-user data directory (see
+[Where your data lives](#where-your-data-lives)), so upgrading or reinstalling
+never touches your pipelines. It listens on `5174`, or the next free port if
+that one is busy, and prints where it landed. `npm uninstall -g lineage-atlas`
+removes the command; your data stays.
+
+### From source
+
+Clone it to change Atlas, or to run an unreleased version:
 
 ```bash
 git clone https://github.com/eesa-syed/lineage-atlas.git
@@ -178,33 +199,15 @@ npm install
 > `node_modules`. If you can't move it, run
 > `git config --global core.longpaths true` first.
 
-### 2. Run it
-
 | Mode | Command | Open | Best for |
 |---|---|---|---|
-| **App** | `npm run build && npm start` | <http://localhost:5174> | Using Atlas. One process, one port, and the API serves the built UI. |
+| **App** | `npm run build && npm start` | <http://localhost:5174> | Using a checkout. One process, one port, and the API serves the built UI. |
 | **Development** | `npm run dev` | <http://localhost:5173> | Changing Atlas. Hot reload, with Vite proxying `/api` to the API on `5174`. |
 
-The first start creates the database and loads a demo analytics warehouse, so
-you have something to explore right away. Start with `--no-seed` (or
-`ATLAS_NO_SEED=1`) for an empty database instead.
-
-### 3. Optional: install the `lineage-atlas` command
-
-To run Atlas from any folder, like an installed tool, install your built
-checkout globally:
-
-```bash
-npm run build
-npm install -g .
-lineage-atlas            # starts the app and opens your browser
-```
-
-This links the command to your checkout, so after a `git pull`, running
-`npm run build` is all it takes to update. Because it still runs from the
-checkout, it keeps using the checkout's `data/atlas.db` and port `5174`. Pass
-`--db <file>` to keep your pipelines somewhere else. Run
-`npm uninstall -g lineage-atlas` to remove it.
+To use a checkout as the `lineage-atlas` command, run `npm run build` and then
+`npm install -g .`. That links the command to the checkout, so after a
+`git pull`, `npm run build` is all it takes to update. Because it still runs
+from the checkout, it keeps using the checkout's `data/atlas.db` and port `5174`.
 
 ### Verify it's running
 
@@ -230,9 +233,8 @@ dbt docs generate      # writes target/manifest.json and target/catalog.json
 lineage-atlas import target/manifest.json --catalog target/catalog.json
 ```
 
-That uses the `lineage-atlas` command from
-[step 3](#3-optional-install-the-lineage-atlas-command). Without it, run this
-from your Atlas checkout instead:
+No install needed: `npx lineage-atlas import …` works the same. From an Atlas
+checkout, run this instead:
 `npm run import -- /path/to/target/manifest.json --catalog /path/to/target/catalog.json`
 (relative paths resolve from the folder you run it in).
 
