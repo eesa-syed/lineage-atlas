@@ -10,6 +10,15 @@ independent of the release version. Its history is in
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-09-15
+
+### Changed
+
+- The README's version badge now reads the published version from npm, so it
+  can no longer fall behind; the file-format badge says 9; a new badge links to
+  the Claude Code agent skill.
+- Examples of `lineage-atlas status` and `/api/version` output show 1.1.0.
+
 ## [1.0.1] — 2026-09-15
 
 ### Security

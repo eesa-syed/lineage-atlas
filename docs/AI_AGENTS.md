@@ -64,7 +64,7 @@ curl -s localhost:5174/api/version
 ```
 
 ```json
-{ "name": "lineage-atlas", "version": "1.0.0", "bundleFormat": "lineage-atlas.pipeline",
+{ "name": "lineage-atlas", "version": "1.1.0", "bundleFormat": "lineage-atlas.pipeline",
   "bundleVersion": 9, "minBundleVersion": 1, "node": "26.8.1",
   "user": "priya", "db": "/Users/priya/Library/Application Support/lineage-atlas/atlas.db" }
 ```
