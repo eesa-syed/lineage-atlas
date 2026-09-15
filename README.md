@@ -13,8 +13,9 @@ locally. Then **let an AI agent document the pipeline, and review its work on th
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Node](https://img.shields.io/badge/node-%E2%89%A524-brightgreen)
-![Version](https://img.shields.io/badge/version-1.0.0-blue)
-![File format](https://img.shields.io/badge/.atlas.json-format%208-lightgrey)
+[![npm](https://img.shields.io/npm/v/lineage-atlas?color=blue&label=npm)](https://www.npmjs.com/package/lineage-atlas)
+![File format](https://img.shields.io/badge/.atlas.json-format%209-lightgrey)
+[![Agent Skill](https://img.shields.io/badge/Claude%20Code-agent%20skill-D97757?logo=claude&logoColor=white)](.claude/skills/lineage-atlas/SKILL.md)
 ![Dependencies](https://img.shields.io/badge/native%20deps-none-success)
 
 [Install](#installation) · [Import from dbt](#import-your-dbt-project) ·
@@ -213,10 +214,10 @@ from the checkout, it keeps using the checkout's `data/atlas.db` and port `5174`
 
 ```bash
 lineage-atlas status     # or: npm run status
-# Running: Lineage Atlas 1.0.0 on http://localhost:5174 · file format 9 · db …/data/atlas.db
+# Running: Lineage Atlas 1.1.0 on http://localhost:5174 · file format 9 · db …/data/atlas.db
 
 curl -s localhost:5174/api/version
-# {"name":"lineage-atlas","version":"1.0.0","bundleFormat":"lineage-atlas.pipeline","bundleVersion":9,...}
+# {"name":"lineage-atlas","version":"1.1.0","bundleFormat":"lineage-atlas.pipeline","bundleVersion":9,...}
 ```
 
 `status` starts nothing and opens no database, so it is safe to run at any time.
@@ -397,7 +398,7 @@ lineage-atlas import   analytics-warehouse-2026-09-13.atlas.json "Warehouse (fro
 {
   "format": "lineage-atlas.pipeline",      // always this value
   "formatVersion": 9,                      // the file format, not the app version
-  "generator": { "name": "lineage-atlas", "version": "1.0.0" },
+  "generator": { "name": "lineage-atlas", "version": "1.1.0" },
   "exportedAt": "2026-09-13T05:37:22Z",
   "counts": { "codes": 18, "edges": 22, "assets": 14 },
   "pipeline": { "name": "Analytics warehouse", "description": "…" },
