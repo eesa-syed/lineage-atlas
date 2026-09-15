@@ -17,7 +17,7 @@
 
 export const APP_NAME = 'lineage-atlas';
 export const APP_TITLE = 'Lineage Atlas';
-export const APP_VERSION = '1.0.0';
+export const APP_VERSION = '1.0.1';
 
 /** The `format` discriminator every bundle carries. Never changes — a rename
  * would make every file in the wild unreadable rather than upgradeable. */

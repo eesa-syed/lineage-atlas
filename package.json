@@ -1,6 +1,6 @@
 {
   "name": "lineage-atlas",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": false,
   "description": "Search a column, see where it comes from and everything it feeds. Local lineage docs for data pipelines: import a dbt project in one command, let an AI agent document it, review its work on a graph.",
   "bin": {

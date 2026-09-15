@@ -10,6 +10,8 @@ independent of the release version. Its history is in
 
 ## [Unreleased]
 
+## [1.0.1] — 2026-09-15
+
 ### Security
 
 - **The server listens on `127.0.0.1` only.** It used to bind every interface,

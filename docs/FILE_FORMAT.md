@@ -324,7 +324,7 @@ writes themselves run in one transaction. A file lands whole or not at all.
 | 6 | 1.0.0 | `generator` and `counts` added to the envelope. |
 | 7 | 1.0.0 | Stewardship: `createdAt`, `updatedAt` and `updatedBy` on every code and asset, and `owner` on assets. Older files are dated from their own `exportedAt` — a true upper bound — with no editor named, and an asset inherits the owner of the code that produces it. |
 | 8 | 1.0.0 | `sampleRows` dropped from every asset. |
-| **9** | **1.0.0** | Optional `provenance` on codes and asset links. Nothing is converted: an older file has none. |
+| **9** | **1.0.1** | Optional `provenance` on codes and asset links. Nothing is converted: an older file has none. |
 
 Steps 1 through 4 mirror the database migrations in `server/src/db.ts` one for
 one, so a file and a database that started life at the same version end up in
